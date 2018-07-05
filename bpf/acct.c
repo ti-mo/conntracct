@@ -5,15 +5,13 @@
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_acct.h>
 
-struct data_t {
-  u32 pid;
+struct acct_event_t {
   u32 cid;
   u64 ts;
-  char comm[TASK_COMM_LEN];
-  atomic64_t packets_orig;
-  atomic64_t bytes_orig;
-  atomic64_t packets_ret;
-  atomic64_t bytes_ret;
+  u64 packets_orig;
+  u64 bytes_orig;
+  u64 packets_ret;
+  u64 bytes_ret;
   union nf_inet_addr srcaddr;
   union nf_inet_addr dstaddr;
 };
@@ -63,6 +61,7 @@ SEC("kretprobe/__nf_ct_refresh_acct")
 int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
 
   u32 pid = bpf_get_current_pid_tgid();
+  u64 ts = bpf_ktime_get_ns();
 
   // Look up the conntrack structure stashed by the kprobe
   struct nf_conn **ctp;
@@ -90,10 +89,9 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   if (!ct_acct_offset)
     return 0;
 
-  struct data_t data = {
-    .pid = bpf_get_current_pid_tgid(),
-    .ts = bpf_ktime_get_ns(), // Get timestamp at start of function
-    .cid = (u32)ct
+  struct acct_event_t data = {
+    .cid = (u32)ct,
+    .ts = ts,
   };
 
   u64 *last;
@@ -117,13 +115,11 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   data.srcaddr = tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3;
   data.dstaddr = tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3;
 
-  data.packets_orig = ctr[IP_CT_DIR_ORIGINAL].packets;
-  data.bytes_orig = ctr[IP_CT_DIR_ORIGINAL].bytes;
+  data.packets_orig = ctr[IP_CT_DIR_ORIGINAL].packets.counter;
+  data.bytes_orig = ctr[IP_CT_DIR_ORIGINAL].bytes.counter;
 
-  data.packets_ret = ctr[IP_CT_DIR_REPLY].packets;
-  data.bytes_ret = ctr[IP_CT_DIR_REPLY].bytes;
-
-  bpf_get_current_comm(&data.comm, sizeof(data.comm));
+  data.packets_ret = ctr[IP_CT_DIR_REPLY].packets.counter;
+  data.bytes_ret = ctr[IP_CT_DIR_REPLY].bytes.counter;
 
   // Submit event to userspace
   // acct_events.perf_submit(ctx, &data, sizeof(data));
