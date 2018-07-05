@@ -101,8 +101,7 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
     return 0;
 
   // Obtain reference to accounting conntrack extension
-  struct nf_conn_acct *acct_ext;
-  bpf_probe_read(&acct_ext, sizeof(acct_ext), (ct_ext + ct_acct_offset));
+  struct nf_conn_acct *acct_ext = ((void *)ct_ext + ct_acct_offset);
   if (!acct_ext)
     return 0;
 
