@@ -121,13 +121,10 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   data.bytes_ret = ctr[IP_CT_DIR_REPLY].bytes.counter;
 
   // Submit event to userspace
-  // acct_events.perf_submit(ctx, &data, sizeof(data));
   bpf_perf_event_output(ctx, &acct_events, CUR_CPU_IDENTIFIER, &data, sizeof(data));
 
   // Save last timestamp we posted the conntrack
   bpf_map_update_elem(&lastupd, &ct, &data.ts, BPF_ANY);
-
-  ({ char _fmt[] = "ret\n"; bpf_trace_printk(_fmt, sizeof(_fmt)); });
 
   return 0;
 }
@@ -139,9 +136,6 @@ int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
 
   // Remove last-updated entry for connection
   bpf_map_delete_elem(&lastupd, &ct);
-
-  // bpf_trace_printk("killed %u\n", (u64)ct);
-  ({ char _fmt[] = "killed %u\n"; bpf_trace_printk(_fmt, sizeof(_fmt), (u64)ct); });
 
   return 0;
 }
