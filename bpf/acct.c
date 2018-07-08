@@ -6,14 +6,18 @@
 #include <net/netfilter/nf_conntrack_acct.h>
 
 struct acct_event_t {
-  u32 cid;
   u64 ts;
+  u32 cid;
+  u32 connmark;
+  union nf_inet_addr srcaddr;
+  union nf_inet_addr dstaddr;
   u64 packets_orig;
   u64 bytes_orig;
   u64 packets_ret;
   u64 bytes_ret;
-  union nf_inet_addr srcaddr;
-  union nf_inet_addr dstaddr;
+  u16 srcport;
+  u16 dstport;
+  u8 proto;
 };
 
 struct bpf_map_def SEC("maps/acct_events") acct_events = {
@@ -89,15 +93,13 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   if (!ct_acct_offset)
     return 0;
 
-  struct acct_event_t data = {
-    .cid = (u32)ct,
-    .ts = ts,
-  };
-
+  // Sample accounting events from the kernel using
+  // a cooldown-based rate limiter.
+  // TODO: Make this configurable from userspace
   u64 *last;
   last = bpf_map_lookup_elem(&lastupd, &ct);
 
-  if (!!last && (data.ts - *last) < (1 * 1000000000))
+  if (!!last && (ts - *last) < (1 * 1000000000))
     return 0;
 
   // Obtain reference to accounting conntrack extension
@@ -105,14 +107,27 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   if (!acct_ext)
     return 0;
 
+  // Allocate event struct after all checks have succeeded
+  struct acct_event_t data = {
+    .cid = (u32)ct,
+    .ts = ts,
+  };
+
+  bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
+
   struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];
   struct nf_conn_counter ctr[IP_CT_DIR_MAX];
 
   bpf_probe_read(&tuplehash, sizeof(tuplehash), &ct->tuplehash);
   bpf_probe_read(&ctr, sizeof(ctr), &acct_ext->counter);
 
+  data.proto = tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.protonum;
+
   data.srcaddr = tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3;
   data.dstaddr = tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3;
+
+  data.srcport = tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all;
+  data.dstport = tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
 
   data.packets_orig = ctr[IP_CT_DIR_ORIGINAL].packets.counter;
   data.bytes_orig = ctr[IP_CT_DIR_ORIGINAL].bytes.counter;
