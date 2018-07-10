@@ -2,8 +2,9 @@ uname=$(shell uname -r)
 LINUX_HEADERS=/lib/modules/$(uname)/build
 
 BPF_OBJ=bpf/acct.o
+SOURCES := $(shell find $(SOURCEDIR) -name '*.go')
 
-conntracct: *.go ${BPF_OBJ}
+conntracct: ${SOURCES} ${BPF_OBJ}
 	go build
 
 ${BPF_OBJ}: bpf/*.c bpf/*.h
