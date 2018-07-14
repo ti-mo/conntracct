@@ -7,6 +7,9 @@ import (
 	"unsafe"
 )
 
+// AcctEventLength is the length of the struct sent by BPF.
+const AcctEventLength = 88
+
 // AcctEvent is a kernelspace probe delivered
 // by the 'acct' BPF program.
 type AcctEvent struct {
@@ -22,6 +25,9 @@ type AcctEvent struct {
 	SrcPort      uint16
 	DstPort      uint16
 	Proto        uint8
+
+	// Decoder metadata for monitoring/tracing
+	EventID uint64
 }
 
 // UnmarshalBinary unmarshals a binary AcctEvent representation

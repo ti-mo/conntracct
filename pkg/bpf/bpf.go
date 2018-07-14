@@ -2,7 +2,6 @@ package bpf
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/iovisor/gobpf/elf"
 )
@@ -56,6 +55,8 @@ func ReadPerf(pm *elf.PerfMap, ebc chan []byte) chan AcctEvent {
 	// Start BPF output decoder in the background
 	go func() {
 
+		var eventID uint64
+
 		var eb []byte
 		var ok bool
 
@@ -63,8 +64,6 @@ func ReadPerf(pm *elf.PerfMap, ebc chan []byte) chan AcctEvent {
 			// Receive binary acct_event struct from BPF
 			eb, ok = <-ebc
 			if !ok {
-				log.Println("BPF acct_event channel closed, exiting read loop")
-
 				// Close the downstream AcctEvent channel
 				close(aec)
 				break
@@ -72,10 +71,15 @@ func ReadPerf(pm *elf.PerfMap, ebc chan []byte) chan AcctEvent {
 
 			// Instantiate new AcctEvent and decode
 			var ae AcctEvent
+
 			err := ae.UnmarshalBinary(eb)
 			if err != nil {
-				log.Fatalf("error decoding BPF acct_event bytestring: %s\n", err)
+				panic(fmt.Sprintf("error unmarshaling BPF acct_event bytestring: %s", err))
 			}
+
+			// Increment goroutine's event counter and send in acct message
+			eventID = eventID + 1
+			ae.EventID = eventID
 
 			aec <- ae
 		}
