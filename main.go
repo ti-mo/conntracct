@@ -1,53 +1,40 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
+	"syscall"
 
-	"gitlab.com/0ptr/conntracct/pkg/bpf"
+	log "github.com/sirupsen/logrus"
+
+	"gitlab.com/0ptr/conntracct/internal/apiserver"
+	"gitlab.com/0ptr/conntracct/internal/pipeline"
+	"gitlab.com/0ptr/conntracct/internal/pprof"
 )
 
 func main() {
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, os.Kill)
+	// Listen on localhost:6060 for pprof sessions
+	pprof.ListenAndServe()
 
-	mod, aec, ael, err := bpf.Init()
-	if err != nil {
-		log.Fatalln("Error initializing bpf infrastructure:", err)
+	pipe := pipeline.New()
+	if err := pipe.RunAcct(); err != nil {
+		log.Fatalln("Error initializing pipeline:", err)
 	}
 
-	go func() {
-		for {
-			ae, ok := <-aec
-			if !ok {
-				log.Println("AcctEvent channel closed, exiting read loop")
-				break
-			}
-
-			fmt.Println(ae)
-		}
-	}()
-
-	go func() {
-		for {
-			ae, ok := <-ael
-			if !ok {
-				log.Println("BPF lost channel closed, exiting read loop")
-				break
-			}
-
-			fmt.Println("lost", ae)
-		}
-	}()
+	// Initialize and run the API server
+	apiserver.Init(pipe)
+	apiserver.Run(":8000")
 
 	defer func() {
-		if err := mod.Close(); err != nil {
-			log.Fatalf("Failed to close program: %v", err)
+		if err := pipe.Cleanup(); err != nil {
+			log.Fatalf("Failure during cleanup: %v", err)
 		}
 	}()
+
+	// Wait for program to be interrupted
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
 	<-sig
 }
