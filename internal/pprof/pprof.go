@@ -1,8 +1,9 @@
 package pprof
 
 import (
-	"log"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 
 	// side effect of registering HTTP handler in default ServeMux
 	_ "net/http/pprof"
