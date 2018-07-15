@@ -1,6 +1,10 @@
 package pipeline
 
-import "github.com/iovisor/gobpf/elf"
+import (
+	"github.com/iovisor/gobpf/elf"
+	log "github.com/sirupsen/logrus"
+	"gitlab.com/0ptr/conntracct/internal/sinks"
+)
 
 // Pipeline is a structure representing the conntracct
 // data ingest pipeline.
@@ -10,7 +14,7 @@ type Pipeline struct {
 	acctModule *elf.Module
 
 	// list of sinks for accounting data
-	acctSinks []AcctSink
+	acctSinks []sinks.AcctSink
 
 	// pipeline statistics
 	Stats Stats
@@ -33,10 +37,32 @@ func New() *Pipeline {
 	return &Pipeline{}
 }
 
-// Cleanup gracefully tears down all resources of a Pipeline structure.
-func (i *Pipeline) Cleanup() error {
+// RegisterAcctSink registers a sink for accounting data
+// to the pipeline.
+func (p *Pipeline) RegisterAcctSink(s sinks.AcctSink) error {
 
-	if err := i.acctModule.Close(); err != nil {
+	// Make sure the sink is initialized before using
+	if !s.IsInit() {
+		return errSinkNotInit
+	}
+
+	// Add the acctSink to the pipeline
+	p.acctSinks = append(p.acctSinks, s)
+
+	log.Infof("Registered accounting sink '%s' to pipeline", s.Name())
+
+	return nil
+}
+
+// GetAcctSinks gets a list of accounting sinks registered to the pipeline.
+func (p *Pipeline) GetAcctSinks() []sinks.AcctSink {
+	return p.acctSinks
+}
+
+// Cleanup gracefully tears down all resources of a Pipeline structure.
+func (p *Pipeline) Cleanup() error {
+
+	if err := p.acctModule.Close(); err != nil {
 		return err
 	}
 

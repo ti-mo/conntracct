@@ -58,6 +58,13 @@ func (p *Pipeline) acctEventWorker(aec chan bpf.AcctEvent) {
 		p.Stats.AcctPerfBytes = ae.EventID * bpf.AcctEventLength
 		p.Stats.AcctEventQueueLen = len(aec)
 
-		// TODO: Publish to AcctEvent sinks
+		p.acctPush(ae)
+	}
+}
+
+// acctPush	pushes a bpf.AcctEvent into all registered accounting sinks.
+func (p *Pipeline) acctPush(ae bpf.AcctEvent) {
+	for _, s := range p.acctSinks {
+		s.Push(ae)
 	}
 }
