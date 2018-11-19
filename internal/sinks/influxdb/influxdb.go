@@ -102,11 +102,15 @@ func (s *InfluxAcctSink) Push(e bpf.AcctEvent) {
 		tags["src_port"] = strconv.FormatUint(uint64(e.SrcPort), 10)
 	}
 
+	// https://github.com/influxdata/influxdb/issues/7801
+	// The InfluxDB wire protocol and Go client supports uints and will mark them as such,
+	// though the current version (1.6) has this behind a build flag as it's not yet
+	// generally available. Only send signed ints for now until this is more widely deployed.
 	fields := map[string]interface{}{
-		"bytes_orig":   e.BytesOrig,
-		"bytes_ret":    e.BytesRet,
-		"packets_orig": e.PacketsOrig,
-		"packets_ret":  e.PacketsRet,
+		"bytes_orig":   int64(e.BytesOrig),
+		"bytes_ret":    int64(e.BytesRet),
+		"packets_orig": int64(e.PacketsOrig),
+		"packets_ret":  int64(e.PacketsRet),
 	}
 
 	pt, err := influx.NewPoint("ct_acct", tags, fields, time.Now())
