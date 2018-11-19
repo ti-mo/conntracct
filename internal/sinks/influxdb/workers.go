@@ -1,6 +1,10 @@
 package influxdb
 
-import log "github.com/sirupsen/logrus"
+import (
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 // sendWorker receives batches from the sink's send channel
 // and uses the InfluxDB client to send it to the database.
@@ -21,5 +25,22 @@ func (s *InfluxAcctSink) sendWorker() {
 
 		// Increase sent batch counter
 		s.IncrBatchSent()
+	}
+}
+
+// tickWorker starts a ticker that periodically flushes the active batch.
+func (s *InfluxAcctSink) tickWorker() {
+
+	t := time.NewTicker(time.Second)
+
+	for {
+		<-t.C
+
+		s.batchLock.Lock()
+
+		s.sendChan <- s.batch
+		s.newBatch()
+
+		s.batchLock.Unlock()
 	}
 }

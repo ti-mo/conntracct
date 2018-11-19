@@ -75,6 +75,7 @@ func (s *InfluxAcctSink) Init(sc sinks.AcctSinkConfig) error {
 	s.config = sc    // config
 
 	go s.sendWorker()
+	go s.tickWorker()
 
 	// Mark the sink as initialized
 	s.init = true
