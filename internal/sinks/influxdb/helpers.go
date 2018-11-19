@@ -27,7 +27,7 @@ func protoIntStr(i uint8) string {
 func (s *InfluxAcctSink) newBatch() {
 
 	b, err := influx.NewBatchPoints(influx.BatchPointsConfig{
-		Precision: "us", // microsecond precision timestamps
+		Precision: "ns", // nanosecond precision timestamps
 	})
 
 	if err != nil {
