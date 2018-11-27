@@ -8,7 +8,7 @@ import (
 )
 
 // AcctEventLength is the length of the struct sent by BPF.
-const AcctEventLength = 88
+const AcctEventLength = 96
 
 // AcctEvent is a kernelspace probe delivered
 // by the 'acct' BPF program.
@@ -24,6 +24,7 @@ type AcctEvent struct {
 	BytesRet     uint64
 	SrcPort      uint16
 	DstPort      uint16
+	NetNS        uint32
 	Proto        uint8
 
 	// Decoder metadata for monitoring/tracing
@@ -34,7 +35,7 @@ type AcctEvent struct {
 // into a struct, using the machine's native endianness.
 func (e *AcctEvent) UnmarshalBinary(b []byte) error {
 
-	if len(b) != 88 {
+	if len(b) != AcctEventLength {
 		return fmt.Errorf("input byte array incorrect length %d", len(b))
 	}
 
@@ -63,13 +64,14 @@ func (e *AcctEvent) UnmarshalBinary(b []byte) error {
 	e.PacketsRet = *(*uint64)(unsafe.Pointer(&b[64]))
 	e.BytesRet = *(*uint64)(unsafe.Pointer(&b[72]))
 
-	e.Proto = b[84]
-
 	// Only extract ports for UDP and TCP
+	e.Proto = b[88]
 	if e.Proto == 6 || e.Proto == 17 {
 		e.SrcPort = binary.BigEndian.Uint16(b[80:82])
 		e.DstPort = binary.BigEndian.Uint16(b[82:84])
 	}
+
+	e.NetNS = *(*uint32)(unsafe.Pointer(&b[84]))
 
 	return nil
 }

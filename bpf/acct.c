@@ -17,6 +17,7 @@ struct acct_event_t {
   u64 bytes_ret;
   u16 srcport;
   u16 dstport;
+  u32 netns;
   u8 proto;
 };
 
@@ -112,6 +113,18 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
     .cid = (u32)ct,
     .ts = ts,
   };
+
+  // Obtain reference to network namespace
+  // Warning: ct_net is a possible_net_t with a single member,
+  // so we read `struct net` instead at the same location. Reading
+  // the `*net` in `possible_net_t` will yield a (non-zero) garbage value.
+  struct net *net;
+  bpf_probe_read(&net, sizeof(net), &ct->ct_net);
+
+  if (net) {
+    // netns field will remain zero if probe read fails.
+    bpf_probe_read(&data.netns, sizeof(data.netns), &net->ns.inum);
+  }
 
   bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
 
