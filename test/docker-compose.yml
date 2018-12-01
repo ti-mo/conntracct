@@ -1,0 +1,40 @@
+version: '3'
+
+services:
+  influxdb:
+    image: influxdb:1.7-alpine
+    networks:
+      - conntracct
+    ports:
+     - "8086:8086"
+     - "8089:8089/udp"
+    environment:
+      # Enable UDP input for the conntracct Influx UDP driver.
+      INFLUXDB_UDP_ENABLED: "true"
+      INFLUXDB_UDP_DATABASE: conntracct_udp
+      INFLUXDB_UDP_BATCH_SIZE: 8388608  # (8*1024*1024)
+  grafana:
+    image: grafana/grafana:5.3.4
+    networks:
+      - conntracct
+    ports:
+      - "3000:3000"
+    volumes:
+      - "grafana:/var/lib/grafana"
+      - "./grafana/datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml"
+  chronograf:
+    image: chronograf:1.7-alpine
+    networks:
+      - conntracct
+    ports:
+      - "3001:8888"
+    volumes:
+      - "influxdb:/var/lib/influxdb"
+    command: --influxdb-url=http://influxdb:8086
+
+networks:
+  conntracct:
+
+volumes:
+  grafana:
+  influxdb:

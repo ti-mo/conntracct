@@ -21,3 +21,7 @@ ${BPF_OBJ}: bpf/*.c bpf/*.h
 		-O2 -emit-llvm -ferror-limit=1 -c bpf/acct.c \
 		$(foreach path,$(LINUX_HEADERS), -I $(path)/arch/x86/include -I $(path)/arch/x86/include/generated -I $(path)/include -I $(path)/include/generated/uapi -I $(path)/arch/x86/include/uapi -I $(path)/include/uapi) \
 		-o - | llc -march=bpf -filetype=obj -o ${BPF_OBJ}
+
+.PHONY: dev
+dev:
+	docker-compose -f test/docker-compose.yml -p conntracct up -d
