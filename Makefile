@@ -25,3 +25,4 @@ ${BPF_OBJ}: bpf/*.c bpf/*.h
 .PHONY: dev
 dev:
 	docker-compose -f test/docker-compose.yml -p conntracct up -d
+	modd
