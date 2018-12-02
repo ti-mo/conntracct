@@ -19,16 +19,17 @@ func (s *InfluxAcctSink) sendWorker() {
 			log.Errorf("InfluxDB sink '%s': Error writing batch: %s. Batch dropped.", s.name, err)
 
 			// Increase dropped batch counter
-			s.IncrBatchDropped()
+			s.stats.IncrBatchDropped()
 			continue
 		}
 
 		// Increase sent batch counter
-		s.IncrBatchSent()
+		s.stats.IncrBatchSent()
 	}
 }
 
 // tickWorker starts a ticker that periodically flushes the active batch.
+// If the batch is empty when the ticker fires, no action is taken.
 func (s *InfluxAcctSink) tickWorker() {
 
 	t := time.NewTicker(time.Second)
@@ -36,11 +37,13 @@ func (s *InfluxAcctSink) tickWorker() {
 	for {
 		<-t.C
 
-		s.batchLock.Lock()
+		s.batchMu.Lock()
 
-		s.sendChan <- s.batch
-		s.newBatch()
+		if len(s.batch.Points()) != 0 {
+			s.sendChan <- s.batch
+			s.newBatch()
+		}
 
-		s.batchLock.Unlock()
+		s.batchMu.Unlock()
 	}
 }

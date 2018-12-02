@@ -33,13 +33,11 @@ type InfluxAcctSink struct {
 	sendChan chan influx.BatchPoints
 
 	// data point batch
-	batch influx.BatchPoints
+	batchMu sync.Mutex
+	batch   influx.BatchPoints
 
-	// mutex for batch operations
-	batchLock sync.Mutex
-
-	// embed sink stats machinery
-	sinks.AcctSinkStats
+	// sink stats
+	stats sinks.AcctSinkStats
 }
 
 // Init initializes the InfluxDB accounting sink.
@@ -119,17 +117,17 @@ func (s *InfluxAcctSink) Push(e bpf.AcctEvent) {
 	}
 
 	// Add the point to the batch
-	s.batchLock.Lock()
+	s.batchMu.Lock()
 	s.batch.AddPoint(pt)
 
 	batchLen := len(s.batch.Points())
 
 	// Record statistics
 	// Manually manage sink stats lock to update counters in one transaction
-	s.AcctSinkStats.Lock()
-	s.AcctSinkStats.Data.BatchLength = batchLen
-	s.AcctSinkStats.Data.EventsPushed++
-	s.AcctSinkStats.Unlock()
+	s.stats.Lock()
+	s.stats.Data.BatchLength = batchLen
+	s.stats.Data.EventsPushed++
+	s.stats.Unlock()
 
 	// Flush the batch when the watermark is reached
 	if batchLen >= int(s.config.BatchWatermark) {
@@ -137,7 +135,7 @@ func (s *InfluxAcctSink) Push(e bpf.AcctEvent) {
 		s.newBatch()
 	}
 
-	s.batchLock.Unlock()
+	s.batchMu.Unlock()
 }
 
 // Name gets the name of the InfluxDB accounting sink.
@@ -152,7 +150,7 @@ func (s *InfluxAcctSink) IsInit() bool {
 
 // Stats returns the InfluxDB accounting sink's statistics structure.
 func (s *InfluxAcctSink) Stats() sinks.AcctSinkStatsData {
-	return s.AcctSinkStats.Data
+	return s.stats.Data
 }
 
 // New returns a new InfluxDB accounting sink.
