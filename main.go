@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"gitlab.com/0ptr/conntracct/internal/apiserver"
+	"gitlab.com/0ptr/conntracct/internal/config"
 	"gitlab.com/0ptr/conntracct/internal/pipeline"
 	"gitlab.com/0ptr/conntracct/internal/pprof"
 	"gitlab.com/0ptr/conntracct/internal/sinks"
@@ -45,6 +46,10 @@ func main() {
 			log.Fatalf("Failure during cleanup: %v", err)
 		}
 	}()
+
+	if err := config.Init(); err != nil {
+		log.Fatalf("Error applying system configuration: %v", err)
+	}
 
 	// Wait for program to be interrupted
 	sig := make(chan os.Signal, 1)
