@@ -5,7 +5,14 @@ BPF_OBJ=bpf/acct.o
 SOURCES := $(shell find $(SOURCEDIR) -name '*.go')
 
 conntracct: ${SOURCES} ${BPF_OBJ}
+	# Unlink the existing binary first, so it can be replaced without
+	# stopping the daemon first.
+	rm $(realpath conntracct)
+
 	go build
+
+	# 'Minimal' capability set to run without being uid 0.
+	sudo setcap cap_sys_admin,cap_ipc_lock,cap_dac_override+eip $(realpath conntracct)
 
 ${BPF_OBJ}: bpf/*.c bpf/*.h
 	clang -D__KERNEL__ -D __BPF_TRACING__ \
