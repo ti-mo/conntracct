@@ -47,7 +47,7 @@ func Run(addr string) error {
 	http.Handle("/", r)
 	go http.ListenAndServe(addr, r)
 
-	log.Infof("Listening on address '%s'\n", addr)
+	log.Infof("Listening on address '%s'", addr)
 
 	return nil
 }
