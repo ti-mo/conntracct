@@ -1,3 +1,7 @@
 # Build
+build/
 bpf/acct.o
 conntracct
+
+# Integration Testing
+.vagrant/
