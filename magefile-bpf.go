@@ -23,6 +23,7 @@ const (
 // Bpf is the namespace for all BPF-related build tasks.
 type Bpf mg.Namespace
 
+// Clean removes the BPF build directory and kernel configurations.
 func (Bpf) Clean() error {
 
 	fmt.Println("Removing directory", bpfBuildPath, "..")
@@ -31,8 +32,9 @@ func (Bpf) Clean() error {
 	}
 
 	for _, k := range kernel.Builds {
-		fmt.Println("Removing directory", k.Directory(), "..")
-		if err := os.RemoveAll(k.Directory()); err != nil {
+		p := path.Join(k.Directory(), ".config")
+		fmt.Println("Removing", p, "..")
+		if err := os.RemoveAll(p); err != nil {
 			return err
 		}
 	}
