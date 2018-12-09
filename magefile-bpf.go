@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path"
 
+	"github.com/magefile/mage/sh"
 	"github.com/magefile/mage/target"
 
 	"github.com/magefile/mage/mg"
@@ -16,8 +17,9 @@ import (
 )
 
 const (
-	bpfBuildPath = "build/bpf/"
-	bpfAcctProbe = "bpf/acct.c"
+	bpfBuildPath     = "build/bpf/"
+	bpfAcctBuildPath = bpfBuildPath + "acct/"
+	bpfAcctProbe     = "bpf/acct.c"
 )
 
 // Bpf is the namespace for all BPF-related build tasks.
@@ -47,7 +49,7 @@ func (Bpf) Clean() error {
 func (Bpf) Build() error {
 
 	// Create build target directory.
-	if err := os.MkdirAll(bpfBuildPath, os.ModePerm); err != nil {
+	if err := os.MkdirAll(bpfAcctBuildPath, os.ModePerm); err != nil {
 		return err
 	}
 
@@ -55,10 +57,10 @@ func (Bpf) Build() error {
 	for _, k := range kernel.Builds {
 
 		// Name of the resulting BPF object file.
-		bpfObjectName := fmt.Sprintf("acct-%s.o", k.Version)
+		bpfObjectName := fmt.Sprintf("%s.o", k.Version)
 
 		// Target path for the compiled BPF object.
-		bpfObjectPath := path.Join(bpfBuildPath, bpfObjectName)
+		bpfObjectPath := path.Join(bpfAcctBuildPath, bpfObjectName)
 
 		// Check if the acct probe source is newer than the probe's object in the build directory.
 		run, err := target.Path(bpfObjectPath, bpfAcctProbe)
@@ -81,6 +83,12 @@ func (Bpf) Build() error {
 		}
 
 		fmt.Println("Built acct probe", bpfObjectName)
+	}
+
+	// Bundle the BPF objects into the binary using statik.
+	// Provide empty -c argument so statik doesn't write a package description.
+	if err := sh.Run("statik", "-f", "-c", "", "-src", bpfBuildPath, "-dest", "pkg/", "-p", "bpf"); err != nil {
+		return err
 	}
 
 	return nil
