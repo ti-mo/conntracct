@@ -13,11 +13,15 @@ import (
 // Params is a map of kernel parameters.
 type Params map[string]string
 
+// Probes is a list of kprobe/kretprobe entries present in the BPF program.
+type Probes []string
+
 // Kernel represents a kernel object.
 type Kernel struct {
 	Version string
 	URL     string
 	Params  Params
+	Probes  Probes
 }
 
 // ArchiveName returns the file name of the archive based on its URL.

@@ -12,41 +12,41 @@ import (
 // Select returns a bytes.Reader holding the BPF program to be used for
 // the given kernel release kr. Returns the reader and the version of
 // the selected probe.
-func Select(kr string) (*bytes.Reader, string, error) {
+func Select(kr string) (*bytes.Reader, kernel.Kernel, error) {
 
 	bfs, err := fs.New()
 	if err != nil {
-		return nil, "", err
+		return nil, kernel.Kernel{}, err
 	}
 
 	probe, err := findProbe(kr, kernel.Builds)
 	if err != nil {
-		return nil, "", err
+		return nil, kernel.Kernel{}, err
 	}
 
-	b, err := fs.ReadFile(bfs, fmt.Sprintf("/acct/%s.o", probe))
+	b, err := fs.ReadFile(bfs, fmt.Sprintf("/acct/%s.o", probe.Version))
 	if err != nil {
-		return nil, "", err
+		return nil, kernel.Kernel{}, err
 	}
 	br := bytes.NewReader(b)
 
 	return br, probe, nil
 }
 
-// findProbe finds a compatible BPF probe version in a list of kernels
+// findProbe returns a compatible BPF probe version in a list of kernels
 // based on the given kernel version string k.
-func findProbe(k string, kernels []kernel.Kernel) (string, error) {
+func findProbe(k string, kernels map[string]kernel.Kernel) (kernel.Kernel, error) {
 
 	// Parse the running kernel version.
 	kv, err := semver.Make(k)
 	if err != nil {
-		return "", err
+		return kernel.Kernel{}, err
 	}
 
 	// Gather versions of all probes and sort them in ascending order.
 	versions := make([]semver.Version, len(kernels))
-	for i, kb := range kernels {
-		versions[i] = semver.MustParse(kb.Version)
+	for v := range kernels {
+		versions = append(versions, semver.MustParse(v))
 	}
 	semver.Sort(versions)
 
@@ -54,18 +54,18 @@ func findProbe(k string, kernels []kernel.Kernel) (string, error) {
 	rs := fmt.Sprintf("<= %s", k)
 	kr := semver.MustParseRange(rs)
 	if v, err := findRange(versions, kr); err == nil {
-		return v, nil
+		return kernels[v], nil
 	}
 
 	// Look for the highest patch release matching the running kernel's major/minor version.
 	rs = fmt.Sprintf("%d.%d.x", kv.Major, kv.Minor)
 	kr = semver.MustParseRange(rs)
 	if v, err := findRange(versions, kr); err == nil {
-		return v, nil
+		return kernels[v], nil
 	}
 
 	// Return the lowest version if none match.
-	return versions[0].String(), nil
+	return kernels[versions[0].String()], nil
 }
 
 // findRange loops over a sorted list of semver.Versions v and returns

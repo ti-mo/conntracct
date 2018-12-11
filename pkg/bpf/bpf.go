@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/iovisor/gobpf/elf"
+	"github.com/pkg/errors"
 	"gitlab.com/0ptr/conntracct/pkg/kallsyms"
 )
 
@@ -23,7 +24,7 @@ func Init(lc chan uint64) (*elf.Module, chan AcctEvent, string, error) {
 	// Load the appropriate BPF probe for the running kernel version.
 	mod, pm, pv, err := Load(kr, ec, lc)
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("error during eBPF init: %v", err)
+		return nil, nil, "", errors.Wrap(err, "loading BPF probe")
 	}
 
 	// Event channel with decoded AcctEvent structures.
@@ -39,22 +40,14 @@ func Init(lc chan uint64) (*elf.Module, chan AcctEvent, string, error) {
 // and returns their handles to the caller.
 func Load(kr string, ec chan []byte, lc chan uint64) (*elf.Module, *elf.PerfMap, string, error) {
 
-	// Load functions that insert records into a map last
-	// to prevent stale records in BPF maps.
-	probes := []string{
-		"kprobe/nf_conntrack_free",
-		"kretprobe/__nf_ct_refresh_acct",
-		"kprobe/__nf_ct_refresh_acct",
+	// Select the correct BPF probe from the library.
+	br, pv, err := Select(kr)
+	if err != nil {
+		return nil, nil, "", errors.Wrap(err, "selecting BPF probe")
 	}
 
 	// Scan kallsyms before attempting BPF load to avoid arcane error output from eBPF attach.
-	err := checkProbeKsyms(probes)
-	if err != nil {
-		return nil, nil, "", err
-	}
-
-	// Select the correct BPF probe from the library.
-	br, pv, err := Select(kr)
+	err = checkProbeKsyms(pv.Probes)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -62,23 +55,23 @@ func Load(kr string, ec chan []byte, lc chan uint64) (*elf.Module, *elf.PerfMap,
 	// Load the module from the bytes.Reader and insert into the kernel.
 	module := elf.NewModuleFromReader(br)
 	if err := module.Load(nil); err != nil {
-		return nil, nil, "", fmt.Errorf("failed to load program: %v", err)
+		return nil, nil, "", errors.Wrap(err, "failed to load ELF binary")
 	}
 
 	// Enable all kprobes in probe list.
-	for _, p := range probes {
+	for _, p := range pv.Probes {
 		if err := module.EnableKprobe(p, 0); err != nil {
-			return nil, nil, "", fmt.Errorf("failed to enable kprobe: %v", err)
+			return nil, nil, "", errors.Wrap(err, "enabling kprobe")
 		}
 	}
 
 	// Set up the acct_events perf map with an event and lost channel.
 	acctEvents, err := elf.InitPerfMap(module, "acct_events", ec, lc)
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to open acct_events perf map: %v", err.Error())
+		return nil, nil, "", errors.Wrap(err, "init acct_events perf map")
 	}
 
-	return module, acctEvents, pv, nil
+	return module, acctEvents, pv.Version, nil
 }
 
 // ReadPerf starts a goroutine to decode binary BPF perf map output from the
