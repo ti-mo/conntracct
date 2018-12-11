@@ -1,16 +1,29 @@
 package kernel
 
-// Builds is a list of Kernels that can be built against.
+// Builds is a list of Kernels that can be built against. We try to stick to one version
+// per minor release. (eg 4.9.x)
+//
+// Whenever a breaking change is made to any of the structures the bpf program references,
+// this map needs to be updated with the version it's introduced in.
 var Builds = map[string]Kernel{
+	// 4.9 used by Debian Stretch.
 	"4.9.142": Kernel{
 		Version: "4.9.142",
 		URL:     "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.9.142.tar.xz",
 		Params:  params["MarkNFTNat"],
 		Probes:  kprobes["acct_v1"],
 	},
+	// Change in nf_conn layout.
 	"4.14.85": {
 		Version: "4.14.85",
 		URL:     "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.14.85.tar.xz",
+		Params:  params["MarkNFTNat"],
+		Probes:  kprobes["acct_v1"],
+	},
+	// 4.17 saw a breaking change in netns struct layout. Not a long-term kernel.
+	"4.17.9": {
+		Version: "4.17.9",
+		URL:     "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.17.9.tar.xz",
 		Params:  params["MarkNFTNat"],
 		Probes:  kprobes["acct_v1"],
 	},
