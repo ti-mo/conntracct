@@ -93,6 +93,7 @@ func (s *InfluxAcctSink) Push(e bpf.AcctEvent) {
 		"dst_port": strconv.FormatUint(uint64(e.DstPort), 10),
 		"proto":    protoIntStr(e.Proto),
 		"connmark": strconv.FormatUint(uint64(e.Connmark), 16),
+		"netns":    strconv.FormatUint(uint64(e.NetNS), 10),
 	}
 
 	// Optionally set flows' source ports (since they're random in most cases)
