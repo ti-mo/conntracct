@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/blang/semver"
 	"github.com/rakyll/statik/fs"
 	"gitlab.com/0ptr/conntracct/pkg/kernel"
 )
 
 // Select returns a bytes.Reader holding the BPF program to be used for
-// the given kernel release kr. Returns the reader and the version of
-// the selected probe.
+// the given kernel release kr. Returns the bytes.Reader of the selected probe
+// and the kernel.Kernel it was built against.
 func Select(kr string) (*bytes.Reader, kernel.Kernel, error) {
 
 	bfs, err := fs.New()
@@ -19,14 +21,17 @@ func Select(kr string) (*bytes.Reader, kernel.Kernel, error) {
 		return nil, kernel.Kernel{}, err
 	}
 
+	// Find an acceptable probe version for the running kernel version.
+	// Always returns a result. If there is no match, will return the lowest probe version.
 	probe, err := findProbe(kr, kernel.Builds)
 	if err != nil {
 		return nil, kernel.Kernel{}, err
 	}
 
-	b, err := fs.ReadFile(bfs, fmt.Sprintf("/acct/%s.o", probe.Version))
+	bpfFile := fmt.Sprintf("/acct/%s.o", probe.Version)
+	b, err := fs.ReadFile(bfs, bpfFile)
 	if err != nil {
-		return nil, kernel.Kernel{}, err
+		return nil, kernel.Kernel{}, errors.Wrap(err, bpfFile)
 	}
 	br := bytes.NewReader(b)
 
@@ -44,7 +49,7 @@ func findProbe(k string, kernels map[string]kernel.Kernel) (kernel.Kernel, error
 	}
 
 	// Gather versions of all probes and sort them in ascending order.
-	versions := make([]semver.Version, len(kernels))
+	versions := make([]semver.Version, 0)
 	for v := range kernels {
 		versions = append(versions, semver.MustParse(v))
 	}

@@ -19,7 +19,7 @@ func (p *Pipeline) RunAcct() error {
 
 	mod, aec, pv, err := bpf.Init(ael)
 	if err != nil {
-		log.Fatalln("Error initializing BPF probe:", err)
+		log.Fatalln("Initializing BPF probe:", err)
 	}
 
 	log.Infof("Inserted probe version %s.", pv)
