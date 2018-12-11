@@ -9,9 +9,8 @@ import (
 	"gitlab.com/0ptr/conntracct/pkg/kallsyms"
 )
 
-// Init initializes the package's accounting infrastructure and BPF
-// message decoder. Convenience method over InitBPF() and ReadPerf().
-func Init(lc chan uint64) (*elf.Module, chan AcctEvent, string, error) {
+// Init initializes the package's accounting infrastructure and BPF message decoder.
+func Init(cfg AcctConfig, lc chan uint64) (*elf.Module, chan AcctEvent, string, error) {
 
 	kr, err := KernelRelease()
 	if err != nil {
@@ -22,7 +21,7 @@ func Init(lc chan uint64) (*elf.Module, chan AcctEvent, string, error) {
 	ec := make(chan []byte)
 
 	// Load the appropriate BPF probe for the running kernel version.
-	mod, pm, pv, err := Load(kr, ec, lc)
+	mod, pm, pv, err := Load(kr, cfg, ec, lc)
 	if err != nil {
 		return nil, nil, "", errors.Wrap(err, "loading BPF probe")
 	}
@@ -38,7 +37,7 @@ func Init(lc chan uint64) (*elf.Module, chan AcctEvent, string, error) {
 
 // Load loads the acct BPF probe, attaches its Kprobes and perf map
 // and returns their handles to the caller.
-func Load(kr string, ec chan []byte, lc chan uint64) (*elf.Module, *elf.PerfMap, string, error) {
+func Load(kr string, cfg AcctConfig, ec chan []byte, lc chan uint64) (*elf.Module, *elf.PerfMap, string, error) {
 
 	// Select the correct BPF probe from the library.
 	br, pv, err := Select(kr)
@@ -56,6 +55,11 @@ func Load(kr string, ec chan []byte, lc chan uint64) (*elf.Module, *elf.PerfMap,
 	module := elf.NewModuleFromReader(br)
 	if err := module.Load(nil); err != nil {
 		return nil, nil, "", errors.Wrap(err, "failed to load ELF binary")
+	}
+
+	// Apply probe configuration.
+	if err := configureProbe(module, cfg); err != nil {
+		return nil, nil, "", errors.Wrap(err, "configuring probe")
 	}
 
 	// Enable all kprobes in probe list.

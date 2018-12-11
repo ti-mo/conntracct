@@ -17,7 +17,9 @@ func (p *Pipeline) RunAcct() error {
 	// Channel for lost message IDs when perf ring buffer is full.
 	ael := make(chan uint64)
 
-	mod, aec, pv, err := bpf.Init(ael)
+	cfg := bpf.AcctConfig{CooldownMillis: 2000}
+
+	mod, aec, pv, err := bpf.Init(cfg, ael)
 	if err != nil {
 		log.Fatalln("Initializing BPF probe:", err)
 	}

@@ -48,6 +48,15 @@ struct bpf_map_def SEC("maps/currct") currct = {
 	.namespace = "",
 };
 
+struct bpf_map_def SEC("maps/config") config = {
+	.type = BPF_MAP_TYPE_HASH,
+	.key_size = sizeof(int),
+	.value_size = sizeof(void *),
+	.max_entries = 1,
+	.pinning = 0,
+	.namespace = "",
+};
+
 
 SEC("kprobe/__nf_ct_refresh_acct")
 int kprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
@@ -97,6 +106,11 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   if (!acct_ext)
     return 0;
 
+  // Initialize cooldown value in the config map to 2 seconds.
+  u64 config_cd = 0;
+  u64 def_cd = 2000000000;
+  bpf_map_update_elem(&config, &config_cd, &def_cd, BPF_NOEXIST);
+
   // Allocate event struct after all checks have succeeded
   struct acct_event_t data = {
     .cid = (u32)ct,
@@ -121,9 +135,14 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   // to be sent as an event. This ensures that flows generate an event at least and
   // at most once per deadline. Packet 2, 8 and 32 are always sent, and also increase
   // the deadline.
-  //
-  // TODO: Make cooldown configurable from userspace (in seconds)
-  u64 cd = 1 * 1000000000;
+
+  // Look up the cooldown value in the config map.
+  u64 *cdp = bpf_map_lookup_elem(&config, &config_cd);
+  u64 cd = def_cd; // Initialize to the default to make sure there is a value.
+  if (cdp) {
+    cd = *cdp;
+  }
+
   u64 pkts_total = (data.packets_orig + data.packets_ret);
 
   // Look up when the next event is scheduled to be sent to userspace.
