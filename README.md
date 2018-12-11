@@ -1,95 +1,51 @@
-We have our hashing algorithm:
-https://github.com/minio/blake2b-simd
+# conntracct
 
-Maps with concurrent access:
-https://github.com/orcaman/concurrent-map
+Low-overhead, real-time network flow exporter based on conntrack, without packet captures.
 
-Use buffered channels wherever possible:
-https://gist.github.com/atotto/9342938
-
-Worker queue design:
-http://nesv.github.io/golang/2014/02/25/worker-queues-in-go.html
-http://marcio.io/2015/07/handling-1-million-requests-per-minute-with-golang/
-
-Only DESTROY events carry accounting info. We will need a second Netlink socket to send accounting queries for every flow. How scalable is this?
-
-Features we require out of mdlayher/netlink:
-
-- NetFilter Netlink (nfnetlink) functionality and parsing, primarily ConnTrack
-  * Old compat NF_NETLINK (NEW/UPDATE/DESTROY) consts from 'libnfnetlink/linux_nfnetlink_compat.h' - why do they still exist?
-  * Macros like NFCT_ALL_CT_GROUPS
-  * Queries for connection states (searches, accounting info, etc.)
-  * Calls to invalidate sessions
-- A function to easily read and modify the buffer size of the Netlink socket
-- A leaner conn.Receive() call devoid of any logic or multipart detection
-  * Perhaps a blocking conn.Stream() that takes a `chan` if the user just wants to receive?
-  * Parsing logic that can be invoked inside any context (eg. reading messages from a `chan` for parallel processing)
-
-
-## Processing Pipeline
-
-### Ingest
-
-1. Pick from Netlink Queue into channel
-2. Parse Netlink messages into structs
-3. Run a fast hash function over the original direction quad
-4. Look up hash in a thread-safe hash map
-5. Conditionally commit/apply the message to the map (only roll-forward)
-
-```
- ----------------
-| Netlink Socket |
- ----------------
-       |
-       | Ordered
-       |
-     -----
-Netlink Workers (n-scalable)
-  - Run Netlink parsing here (not Conntrack parsing)
-  - Output of this block of workers is considered unordered
-     -----
-       |
-       | Unordered messages
-       | Buffered channel (high contention)
-       | M:M channel
-       |
-     -----
-Conntrack Workers (n-scalable)
-  - Extract Conntrack attributes
-  - Run a quad hash
-     -----
-       |
-       | Unordered Messages
-       | Buffered channel
-       | M:1 channel
-       |
-     -----
-Commit Workers (single or n-scalable)
-  - Look up the Conntrack message hash in the state table
-  - Check if the message could advance the connection state
-  - Commit the transaction
-  - Log any out-of-order transactions
-     -----
-```
-
-Scaling out commit workers might incur a significant performance penalty
-on map accesses. This needs to be benchmarked using concurrent-map.
-
-Conntrack garbage collector
 ---
-https://patchwork.ozlabs.org/patch/680336
 
-Conntracks that are timed out will NOT be immediately evicted from the kernel cache, and DESTROY events will not be sent in time.
-Cleanup is done by gc_worker() in the kernel. DESTROY events are sent when the garbage collector reaps expired flows.
+## Installing
 
-It is possible for a flow not to be evicted when the timer expires. If communication resumes (eg. UDP)
-between a flow expiring and the garbage collect running, the ID will be re-used and the counters reset.
-DESTROY and NEW events will be generated back-to-back, but when processing the event pipeline asynchronously,
-it's possible for these messages to be processed out-of-order. We will have to mix and match (and make sense of)
-events and polling messages to reach the right conclusion.
+Get the latest binary from Releases. Conntracct does not need to run as root,
+but it needs the following capabilities:
 
-- If counters reset from polling an ID, expect a DESTROY on that ID, but obey the counters from the poll.
-  * Copy the 'old' flow to an archival table instead of moving it to preserve its accounting info and starting timestamp
-  * Do not archive/evict the freshly-reset flow when the DESTROY comes in. (eg. set ExpectDestroy flag on flow)
-  * Expect a NEW event (eg. set ExpectNew) on the new flow and overwrite its timestamp with the one from the new event
-- Connection tuple info will never change, this only happens when re-using same ports/addresses.
+When using the BPF probe for real-time accounting events:
+
+- `cap_sys_admin` for calling bpf()
+- `cap_ipc_lock` for locking memory for the ring buffer
+- `cap_dac_override` for opening /sys/kernel/debug/tracing/*
+
+When letting Conntracct manage sysctl:
+- `cap_net_admin` for managing `sysctl net.netfilter.nf_conntrack_acct`
+
+## Building
+
+Conntracct uses [Mage](https://magefile.org) for building.
+
+`mage build`
+
+All BPF probes are pre-built using Clang 7.0 and are bundled using `statik`.
+This means the binary can be built from source with just the Go toolchain,
+and all probes are available to be used by just importing the `pkg/bpf`
+package, even from other projects.
+
+### Building BPF probes
+
+All bpf-related tasks are in their own `bpf:` Mage namespace.
+
+`mage bpf:build`
+
+This will fetch, extract and configure all versions of Linux targeted by
+the build package to build probes against. This is performed in isolation in
+`/tmp/conntrack/kernels` and will not touch your installed OS kernel.
+
+## Developing
+
+Conntracct comes with a Docker-based development environment, available using
+
+`mage dev`
+
+This will launch a docker-compose stack, build the binary and run `modd` for
+live reloading on save.
+
+`go get github.com/cortesi/modd/cmd/modd`
