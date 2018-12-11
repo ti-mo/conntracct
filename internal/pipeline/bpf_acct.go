@@ -14,12 +14,17 @@ func (p *Pipeline) RunAcct() error {
 		return errAcctAlreadyInitialized
 	}
 
-	mod, aec, ael, err := bpf.Init()
+	// Channel for lost message IDs when perf ring buffer is full.
+	ael := make(chan uint64)
+
+	mod, aec, pv, err := bpf.Init(ael)
 	if err != nil {
-		log.Fatalln("Error initializing acct infrastructure:", err)
+		log.Fatalln("Error initializing BPF probe:", err)
 	}
 
-	// Save the elf module to ingest object
+	log.Infof("Inserted probe version %s.", pv)
+
+	// Save the elf module to ingest object.
 	p.acctModule = mod
 
 	go p.acctEventWorker(aec)
@@ -36,7 +41,7 @@ func (p *Pipeline) RunAcct() error {
 		}
 	}()
 
-	log.Info("Started BPF accounting infrastructure")
+	log.Info("Started BPF accounting probe.")
 
 	return nil
 }

@@ -4,14 +4,40 @@ import (
 	"fmt"
 	"strings"
 
-	"gitlab.com/0ptr/conntracct/pkg/kallsyms"
-
 	"github.com/iovisor/gobpf/elf"
+	"gitlab.com/0ptr/conntracct/pkg/kallsyms"
 )
 
-// InitBPF loads the acct BPF probe, enables its Kprobes
-// and perf map and returns their handles to the caller.
-func InitBPF() (*elf.Module, *elf.PerfMap, chan []byte, chan uint64, error) {
+// Init initializes the package's accounting infrastructure and BPF
+// message decoder. Convenience method over InitBPF() and ReadPerf().
+func Init(lc chan uint64) (*elf.Module, chan AcctEvent, string, error) {
+
+	kr, err := KernelRelease()
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	// Intermediate channel for binary perf map output towards the decoder.
+	ec := make(chan []byte)
+
+	// Load the appropriate BPF probe for the running kernel version.
+	mod, pm, pv, err := Load(kr, ec, lc)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("error during eBPF init: %v", err)
+	}
+
+	// Event channel with decoded AcctEvent structures.
+	ed := make(chan AcctEvent)
+
+	// Start BPF acct_event decoder in background.
+	ReadPerf(pm, ec, ed)
+
+	return mod, ed, pv, nil
+}
+
+// Load loads the acct BPF probe, attaches its Kprobes and perf map
+// and returns their handles to the caller.
+func Load(kr string, ec chan []byte, lc chan uint64) (*elf.Module, *elf.PerfMap, string, error) {
 
 	// Load functions that insert records into a map last
 	// to prevent stale records in BPF maps.
@@ -21,46 +47,46 @@ func InitBPF() (*elf.Module, *elf.PerfMap, chan []byte, chan uint64, error) {
 		"kprobe/__nf_ct_refresh_acct",
 	}
 
-	// TODO: Load BPF object with statik or bindata
-
 	// Scan kallsyms before attempting BPF load to avoid arcane error output from eBPF attach.
 	err := checkProbeKsyms(probes)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, "", err
 	}
 
-	module := elf.NewModule("bpf/acct.o")
+	// Select the correct BPF probe from the library.
+	br, pv, err := Select(kr)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	// Load the module from the bytes.Reader and insert into the kernel.
+	module := elf.NewModuleFromReader(br)
 	if err := module.Load(nil); err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to load program: %v", err)
+		return nil, nil, "", fmt.Errorf("failed to load program: %v", err)
 	}
 
 	// Enable all kprobes in probe list.
 	for _, p := range probes {
 		if err := module.EnableKprobe(p, 0); err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("failed to enable kprobe: %v", err)
+			return nil, nil, "", fmt.Errorf("failed to enable kprobe: %v", err)
 		}
 	}
 
-	eventChan := make(chan []byte)
-	lostChan := make(chan uint64)
-
 	// Set up the acct_events perf map with an event and lost channel.
-	acctEvents, err := elf.InitPerfMap(module, "acct_events", eventChan, lostChan)
+	acctEvents, err := elf.InitPerfMap(module, "acct_events", ec, lc)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to open acct_events perf map: %v", err.Error())
+		return nil, nil, "", fmt.Errorf("failed to open acct_events perf map: %v", err.Error())
 	}
 
-	return module, acctEvents, eventChan, lostChan, nil
+	return module, acctEvents, pv, nil
 }
 
 // ReadPerf starts a goroutine to decode binary BPF perf map output from the
 // []byte channel into the returned AcctEvent channel. Calls PollStart() on the
 // given elf.PerfMap.
-func ReadPerf(pm *elf.PerfMap, ebc chan []byte) chan AcctEvent {
+func ReadPerf(pm *elf.PerfMap, ebc chan []byte, edc chan AcctEvent) {
 
-	aec := make(chan AcctEvent)
-
-	// Start BPF output decoder in the background
+	// Start BPF output decoder in the background.
 	go func() {
 
 		var eventID uint64
@@ -69,15 +95,15 @@ func ReadPerf(pm *elf.PerfMap, ebc chan []byte) chan AcctEvent {
 		var ok bool
 
 		for {
-			// Receive binary acct_event struct from BPF
+			// Receive binary acct_event struct from BPF.
 			eb, ok = <-ebc
 			if !ok {
-				// Close the downstream AcctEvent channel
-				close(aec)
+				// Close the downstream AcctEvent channel.
+				close(edc)
 				break
 			}
 
-			// Instantiate new AcctEvent and decode
+			// Instantiate new AcctEvent and decode.
 			var ae AcctEvent
 
 			err := ae.UnmarshalBinary(eb)
@@ -85,34 +111,16 @@ func ReadPerf(pm *elf.PerfMap, ebc chan []byte) chan AcctEvent {
 				panic(fmt.Sprintf("error unmarshaling BPF acct_event bytestring: %s", err))
 			}
 
-			// Increment goroutine's event counter and send in acct message
+			// Increment goroutine's event counter and send in acct message.
 			eventID = eventID + 1
 			ae.EventID = eventID
 
-			aec <- ae
+			edc <- ae
 		}
 	}()
 
-	// Start polling the BPF perf ring buffer
+	// Start polling the BPF perf ring buffer.
 	pm.PollStart()
-
-	return aec
-}
-
-// Init initializes the package's accounting infrastructure and BPF
-// message decoder. Convenience method over InitBPF() and ReadPerf().
-func Init() (*elf.Module, chan AcctEvent, chan uint64, error) {
-
-	// Initialize accounting infrastructure
-	mod, pm, ec, lc, err := InitBPF()
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error during eBPF init: %v", err)
-	}
-
-	// Start BPF acct_event decoder in background
-	ev := ReadPerf(pm, ec)
-
-	return mod, ev, lc, nil
 }
 
 // checkProbeKsyms checks whether a list of k(ret)probes have their target functions
