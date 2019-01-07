@@ -40,9 +40,9 @@ type AcctProbe struct {
 	started bool
 }
 
-// New instantiates an AcctProbe using the given AcctConfig.
+// NewAcctProbe instantiates an AcctProbe using the given AcctConfig.
 // Loads the BPF program into the kernel but does not attach its kprobes yet.
-func New(cfg AcctConfig) (*AcctProbe, error) {
+func NewAcctProbe(cfg AcctConfig) (*AcctProbe, error) {
 
 	kr, err := kernelRelease()
 	if err != nil {

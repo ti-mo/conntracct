@@ -21,7 +21,7 @@ func (p *Pipeline) InitAcct() error {
 	p.acctChan = make(chan bpf.AcctEvent, 1024)
 
 	// Create a new accounting probe.
-	ap, err := bpf.New(cfg)
+	ap, err := bpf.NewAcctProbe(cfg)
 	if err != nil {
 		log.Fatalln("Initializing BPF probe:", err)
 	}
