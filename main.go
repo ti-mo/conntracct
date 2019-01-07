@@ -17,24 +17,26 @@ import (
 
 func main() {
 
-	// Listen on localhost:6060 for pprof sessions
+	// Listen on localhost:6060 for pprof sessions.
 	pprof.ListenAndServe()
 
-	// Create pipeline
 	pipe := pipeline.New()
 
-	// Attach InfluxDB sink
+	// Attach InfluxDB sink.
 	idb := influxdb.New()
-	if err := idb.Init(sinks.AcctSinkConfig{Addr: "localhost:8089", Name: "le_influx"}); err != nil {
+	if err := idb.Init(sinks.AcctSinkConfig{Addr: "localhost:8089", Name: "ct_influx"}); err != nil {
 		log.Fatalln("Error initializing InfluxDB sink:", err)
 	}
-
 	if err := pipe.RegisterAcctSink(&idb); err != nil {
 		log.Fatalln("Error registering sink:", err)
 	}
 
-	if err := pipe.RunAcct(); err != nil {
-		log.Fatalln("Error initializing pipeline:", err)
+	// Initialize and start accounting infrastructure.
+	if err := pipe.InitAcct(); err != nil {
+		log.Fatalln("Error initializing accounting:", err)
+	}
+	if err := pipe.StartAcct(); err != nil {
+		log.Fatalln("Error starting accounting:", err)
 	}
 
 	// Initialize and run the API server

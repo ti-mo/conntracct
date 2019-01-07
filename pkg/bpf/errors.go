@@ -8,5 +8,10 @@ const (
 )
 
 var (
-	errNotInRange = errors.New("range check did not match any version")
+	errNotInRange     = errors.New("range check did not match any version")
+	errProbeStarted   = errors.New("AcctProbe has already been started")
+	errPerfChanClosed = errors.New("perfChan was closed, perfWorker stopping")
+	errLostChanClosed = errors.New("lostChan was closed, lostWorker stopping")
+	errDupConsumer    = errors.New("an AcctConsumer with the same name is already registered")
+	errNoConsumer     = errors.New("could not find the AcctConsumer to delete")
 )

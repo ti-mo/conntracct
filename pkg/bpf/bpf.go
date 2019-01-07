@@ -2,151 +2,196 @@ package bpf
 
 import (
 	"fmt"
-	"strings"
+	"sync"
+	"sync/atomic"
+
+	"gitlab.com/0ptr/conntracct/pkg/kernel"
 
 	"github.com/iovisor/gobpf/elf"
 	"github.com/pkg/errors"
-	"gitlab.com/0ptr/conntracct/pkg/kallsyms"
 )
 
-// Init initializes the package's accounting infrastructure and BPF message decoder.
-func Init(cfg AcctConfig, lc chan uint64) (*elf.Module, chan AcctEvent, string, error) {
+const acctPerfMap = "acct_events"
 
-	kr, err := KernelRelease()
-	if err != nil {
-		return nil, nil, "", err
-	}
+// AcctProbe is an instance of a BPF probe running in the kernel.
+type AcctProbe struct {
 
-	// Intermediate channel for binary perf map output towards the decoder.
-	ec := make(chan []byte)
+	// gobpf/elf objects.
+	module  *elf.Module
+	perfMap *elf.PerfMap
 
-	// Load the appropriate BPF probe for the running kernel version.
-	mod, pm, pv, err := Load(kr, cfg, ec, lc)
-	if err != nil {
-		return nil, nil, "", errors.Wrap(err, "loading BPF probe")
-	}
+	// Target kernel of the loaded probe.
+	kernel kernel.Kernel
 
-	// Event channel with decoded AcctEvent structures.
-	ed := make(chan AcctEvent)
+	// List of event consumers of the probe.
+	consumerMu sync.RWMutex
+	consumers  []*AcctConsumer
 
-	// Start BPF acct_event decoder in background.
-	ReadPerf(pm, ec, ed)
+	// Amount of lost BPF perf events.
+	lostChan chan uint64
+	lost     uint64
 
-	return mod, ed, pv, nil
+	// Communication channels with the perfWorker.
+	perfChan chan []byte
+	errChan  chan error
+
+	// Started status of the probe.
+	startMu sync.Mutex
+	started bool
 }
 
-// Load loads the acct BPF probe, attaches its Kprobes and perf map
-// and returns their handles to the caller.
-func Load(kr string, cfg AcctConfig, ec chan []byte, lc chan uint64) (*elf.Module, *elf.PerfMap, string, error) {
+// New instantiates an AcctProbe using the given AcctConfig.
+// Loads the BPF program into the kernel but does not attach its kprobes yet.
+func New(cfg AcctConfig) (*AcctProbe, error) {
+
+	kr, err := kernelRelease()
+	if err != nil {
+		return nil, err
+	}
 
 	// Select the correct BPF probe from the library.
-	br, pv, err := Select(kr)
+	br, k, err := Select(kr)
 	if err != nil {
-		return nil, nil, "", errors.Wrap(err, "selecting BPF probe")
+		return nil, errors.Wrap(err, "selecting BPF probe")
+	}
+
+	// Instantiate AcctProbe with selected target kernel struct.
+	ap := AcctProbe{
+		kernel: k,
 	}
 
 	// Scan kallsyms before attempting BPF load to avoid arcane error output from eBPF attach.
-	err = checkProbeKsyms(pv.Probes)
+	err = checkProbeKsyms(k.Probes)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, err
 	}
 
 	// Load the module from the bytes.Reader and insert into the kernel.
-	module := elf.NewModuleFromReader(br)
-	if err := module.Load(nil); err != nil {
-		return nil, nil, "", errors.Wrap(err, "failed to load ELF binary")
+	ap.module = elf.NewModuleFromReader(br)
+	if err := ap.module.Load(nil); err != nil {
+		return nil, errors.Wrap(err, "failed to load ELF binary")
 	}
 
 	// Apply probe configuration.
-	if err := configureProbe(module, cfg); err != nil {
-		return nil, nil, "", errors.Wrap(err, "configuring probe")
+	if err := configureProbe(ap.module, cfg); err != nil {
+		return nil, errors.Wrap(err, "configuring BPF probe")
 	}
 
-	// Enable all kprobes in probe list.
-	for _, p := range pv.Probes {
-		if err := module.EnableKprobe(p, 0); err != nil {
-			return nil, nil, "", errors.Wrap(err, "enabling kprobe")
+	return &ap, nil
+}
+
+// Start attaches the BPF program's kprobes and starts polling the perf ring buffer.
+func (ap *AcctProbe) Start() error {
+
+	ap.startMu.Lock()
+	defer ap.startMu.Unlock()
+
+	if ap.started {
+		return errProbeStarted
+	}
+
+	// Enable all kprobes in target kernel's probe list.
+	for _, p := range ap.kernel.Probes {
+		if err := ap.module.EnableKprobe(p, 0); err != nil {
+			return errors.Wrap(err, "enabling kprobe")
 		}
 	}
+
+	ap.perfChan = make(chan []byte, 1024)
+	ap.lostChan = make(chan uint64)
+	ap.errChan = make(chan error)
 
 	// Set up the acct_events perf map with an event and lost channel.
-	acctEvents, err := elf.InitPerfMap(module, "acct_events", ec, lc)
+	pm, err := elf.InitPerfMap(ap.module, acctPerfMap, ap.perfChan, ap.lostChan)
 	if err != nil {
-		return nil, nil, "", errors.Wrap(err, "init acct_events perf map")
+		return errors.Wrap(err, fmt.Sprintf("InitPerfMap %s", acctPerfMap))
 	}
+	ap.perfMap = pm
 
-	return module, acctEvents, pv.Version, nil
-}
+	// Start worker watching errChan for errors.
+	// go errWorker(ap)
 
-// ReadPerf starts a goroutine to decode binary BPF perf map output from the
-// []byte channel into the returned AcctEvent channel. Calls PollStart() on the
-// given elf.PerfMap.
-func ReadPerf(pm *elf.PerfMap, ebc chan []byte, edc chan AcctEvent) {
+	// Start the event message decoder and fanout worker.
+	go perfWorker(ap)
 
-	// Start BPF output decoder in the background.
-	go func() {
+	// Start worker counting the amount of lost messages.
+	go lostWorker(ap)
 
-		var eventID uint64
-
-		var eb []byte
-		var ok bool
-
-		for {
-			// Receive binary acct_event struct from BPF.
-			eb, ok = <-ebc
-			if !ok {
-				// Close the downstream AcctEvent channel.
-				close(edc)
-				break
-			}
-
-			// Instantiate new AcctEvent and decode.
-			var ae AcctEvent
-
-			err := ae.UnmarshalBinary(eb)
-			if err != nil {
-				panic(fmt.Sprintf("error unmarshaling BPF acct_event bytestring: %s", err))
-			}
-
-			// Increment goroutine's event counter and send in acct message.
-			eventID = eventID + 1
-			ae.EventID = eventID
-
-			edc <- ae
-		}
-	}()
-
-	// Start polling the BPF perf ring buffer.
+	// Start polling the BPF perf ring buffer, starting message flow
+	// into the AcctProbe's perfChan.
 	pm.PollStart()
-}
 
-// checkProbeKsyms checks whether a list of k(ret)probes have their target functions
-// present in the kernel. Expects strings in the format of k(ret)probe/<kernel-symbol>.
-func checkProbeKsyms(probes []string) error {
-
-	// Parse /proc/kallsyms and store result in kallsyms package.
-	err := kallsyms.Refresh()
-	if err != nil {
-		return err
-	}
-
-	for _, p := range probes {
-		ps := strings.Split(p, "/")
-		if len(ps) != 2 {
-			return fmt.Errorf(errFmtSplitKprobe, p)
-		}
-
-		sym := ps[1]
-
-		sf, err := kallsyms.Find(sym)
-		if err != nil {
-			return err
-		}
-
-		if !sf {
-			return fmt.Errorf(errFmtSymNotFound, sym)
-		}
-	}
+	ap.started = true
 
 	return nil
+}
+
+// Stop stops the BPF program and releases all its related resources.
+// TODO: Implement this properly.
+func (ap *AcctProbe) Stop() error {
+	return ap.module.Close()
+}
+
+// Kernel returns the target kernel structure of the selected probe.
+func (ap *AcctProbe) Kernel() kernel.Kernel {
+	return ap.kernel
+}
+
+// perfWorker reads binary events from the AcctProbe's event channel,
+// unmarshals the events into AcctEvents and sends them on all registered
+// consumers' event channels. Exits if perfChan is closed.
+func perfWorker(ap *AcctProbe) {
+
+	var eventID uint64
+
+	var eb []byte
+	var ok bool
+
+	for {
+		// Receive binary acct_event struct from BPF.
+		eb, ok = <-ap.perfChan
+		if !ok {
+			ap.errChan <- errPerfChanClosed
+			break
+		}
+
+		var ae AcctEvent
+		err := ae.UnmarshalBinary(eb)
+		if err != nil {
+			ap.errChan <- errors.Wrap(err, "error unmarshaling AcctEvent byte array")
+		}
+
+		// Increment goroutine's event counter and send in acct message.
+		eventID++
+		ae.EventID = eventID
+
+		// Fanout to all registered consumers.
+		ap.consumerMu.RLock()
+		for _, c := range ap.consumers {
+			// Non-blocking send on the consumer's event channel.
+			select {
+			case c.events <- ae:
+			default:
+				// Increment the consumer's lost counter if AcctEvent
+				// could not be sent on the channel.
+				atomic.AddUint64(&c.lost, 1)
+			}
+		}
+		ap.consumerMu.RUnlock()
+	}
+}
+
+// lostWorker increments the AcctProbe's lost field for every message
+// received on its lostChan. Exits if lostChan is closed.
+func lostWorker(ap *AcctProbe) {
+
+	for {
+		_, ok := <-ap.lostChan
+		if !ok {
+			ap.errChan <- errLostChanClosed
+			break
+		}
+
+		atomic.AddUint64(&ap.lost, 1)
+	}
 }

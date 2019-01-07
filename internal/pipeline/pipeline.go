@@ -1,27 +1,26 @@
 package pipeline
 
 import (
-	"github.com/iovisor/gobpf/elf"
+	"sync"
+
 	log "github.com/sirupsen/logrus"
 	"gitlab.com/0ptr/conntracct/internal/sinks"
+	"gitlab.com/0ptr/conntracct/pkg/bpf"
 )
 
 // Pipeline is a structure representing the conntracct
 // data ingest pipeline.
 type Pipeline struct {
-
-	// acct elf module handle
-	acctModule *elf.Module
-
-	// list of sinks for accounting data
-	acctSinks []sinks.AcctSink
-
-	// pipeline statistics
 	Stats Stats
+
+	acctMu    sync.Mutex
+	acctProbe *bpf.AcctProbe
+	acctChan  chan bpf.AcctEvent
+	acctSinks []sinks.AcctSink
 }
 
 // Stats holds various statistics and information about the
-// data processing pipeline
+// data processing pipeline.
 type Stats struct {
 
 	// amount of `acct_event` structs received from kernel
@@ -41,12 +40,15 @@ func New() *Pipeline {
 // to the pipeline.
 func (p *Pipeline) RegisterAcctSink(s sinks.AcctSink) error {
 
-	// Make sure the sink is initialized before using
+	// Make sure the sink is initialized before using.
 	if !s.IsInit() {
 		return errSinkNotInit
 	}
 
-	// Add the acctSink to the pipeline
+	p.acctMu.Lock()
+	defer p.acctMu.Unlock()
+
+	// Add the acctSink to the pipeline.
 	p.acctSinks = append(p.acctSinks, s)
 
 	log.Infof("Registered accounting sink '%s' to pipeline", s.Name())
@@ -62,7 +64,8 @@ func (p *Pipeline) GetAcctSinks() []sinks.AcctSink {
 // Cleanup gracefully tears down all resources of a Pipeline structure.
 func (p *Pipeline) Cleanup() error {
 
-	if err := p.acctModule.Close(); err != nil {
+	// Stop the accounting probe.
+	if err := p.acctProbe.Stop(); err != nil {
 		return err
 	}
 

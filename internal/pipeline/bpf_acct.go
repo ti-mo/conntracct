@@ -6,53 +6,69 @@ import (
 	"gitlab.com/0ptr/conntracct/pkg/bpf"
 )
 
-// RunAcct starts collecting conntrack accounting data
-// from the local Linux host.
-func (p *Pipeline) RunAcct() error {
+// InitAcct sets up the pipeline with an
+func (p *Pipeline) InitAcct() error {
 
-	if p.acctModule != nil {
+	p.acctMu.Lock()
+	defer p.acctMu.Unlock()
+
+	if p.acctProbe != nil {
 		return errAcctAlreadyInitialized
 	}
 
-	// Channel for lost message IDs when perf ring buffer is full.
-	ael := make(chan uint64)
-
 	cfg := bpf.AcctConfig{CooldownMillis: 2000}
 
-	mod, aec, pv, err := bpf.Init(cfg, ael)
+	p.acctChan = make(chan bpf.AcctEvent, 1024)
+
+	// Create a new accounting probe.
+	ap, err := bpf.New(cfg)
 	if err != nil {
 		log.Fatalln("Initializing BPF probe:", err)
 	}
+	log.Infof("Inserted probe version %s", ap.Kernel().Version)
 
-	log.Infof("Inserted probe version %s.", pv)
+	// Create and register a new accounting consumer using
+	// the pipeline's AcctEvent channel.
+	ac := bpf.NewAcctConsumer("AcctPipeline", p.acctChan)
+	if err := ap.RegisterConsumer(ac); err != nil {
+		log.Fatalln("Registering consumer to probe:", err)
+	}
+	log.Info("Registered probe consumer AcctPipeline")
 
-	// Save the elf module to ingest object.
-	p.acctModule = mod
+	// Save the AcctProbe reference to the pipeline.
+	p.acctProbe = ap
 
-	go p.acctEventWorker(aec)
+	return nil
+}
 
-	go func() {
-		for {
-			ae, ok := <-ael
-			if !ok {
-				log.Info("BPF lost channel closed, exiting read loop")
-				break
-			}
+// StartAcct starts the acctEventWorker and the AcctProbe,
+// and starts ingesting accounting events into the Pipeline.
+func (p *Pipeline) StartAcct() error {
 
-			log.Errorf("Dropped BPF event '%v', possible congestion", ae)
-		}
-	}()
+	p.acctMu.Lock()
+	defer p.acctMu.Unlock()
 
-	log.Info("Started BPF accounting probe.")
+	if p.acctProbe == nil {
+		return errAcctNotInitialized
+	}
+
+	// Start the conntracct event consumer.
+	go p.acctEventWorker(p.acctChan)
+
+	// Start the AcctProbe.
+	if err := p.acctProbe.Start(); err != nil {
+		log.Fatalln("Starting AcctProbe:", err)
+	}
+	log.Info("Started BPF accounting probe")
 
 	return nil
 }
 
 // acctEventWorker receives from a bpf.AcctEvent channel
 // and delivers to all AcctEvent sinks registered to the pipeline.
+// TODO: Allow multiple instances of this goroutine to be run.
 func (p *Pipeline) acctEventWorker(aec chan bpf.AcctEvent) {
 	for {
-
 		ae, ok := <-aec
 		if !ok {
 			log.Info("AcctEvent channel closed, stopping acctEventWorker")
@@ -65,13 +81,9 @@ func (p *Pipeline) acctEventWorker(aec chan bpf.AcctEvent) {
 		p.Stats.AcctPerfBytes = ae.EventID * bpf.AcctEventLength
 		p.Stats.AcctEventQueueLen = len(aec)
 
-		p.acctPush(ae)
-	}
-}
-
-// acctPush	pushes a bpf.AcctEvent into all registered accounting sinks.
-func (p *Pipeline) acctPush(ae bpf.AcctEvent) {
-	for _, s := range p.acctSinks {
-		s.Push(ae)
+		// Fan out to all registered accounting sinks.
+		for _, s := range p.acctSinks {
+			s.Push(ae)
+		}
 	}
 }
