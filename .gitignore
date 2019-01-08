@@ -3,5 +3,6 @@ build/
 bpf/acct.o
 conntracct
 
-# Integration Testing
+# Testing
 .vagrant/
+test/output/*
