@@ -14,4 +14,7 @@ var (
 	errLostChanClosed = errors.New("lostChan was closed, lostWorker stopping")
 	errDupConsumer    = errors.New("an AcctConsumer with the same name is already registered")
 	errNoConsumer     = errors.New("could not find the AcctConsumer to delete")
+
+	errSysctlGet = "error getting sysctl"
+	errSysctlSet = "error setting sysctl"
 )
