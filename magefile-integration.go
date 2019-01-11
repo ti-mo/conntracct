@@ -46,3 +46,12 @@ func (Integration) Coverhtml() error {
 
 	return nil
 }
+
+func (Integration) Dev() error {
+	fmt.Println("Hot-running integration tests with modd..")
+	if err := sh.RunV("modd", "-f", "modd-integration.conf"); err != nil {
+		return err
+	}
+
+	return nil
+}
