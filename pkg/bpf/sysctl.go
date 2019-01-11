@@ -10,9 +10,5 @@ func Sysctls(verbose bool) error {
 		"net.netfilter.nf_conntrack_acct": "1",
 	}
 
-	if err := sysctl.Apply(sysctls, verbose); err != nil {
-		return err
-	}
-
-	return nil
+	return sysctl.Apply(sysctls, verbose)
 }
