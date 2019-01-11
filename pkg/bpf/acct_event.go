@@ -76,6 +76,11 @@ func (e *AcctEvent) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
+// String returns a readable string representation of the AcctEvent.
+func (e *AcctEvent) String() string {
+	return fmt.Sprintf("%+v", *e)
+}
+
 // isIPv4 checks if everything but the first 4 bytes of a bytearray
 // are zero. The nf_inet_addr C struct holds an IPv4 address in the
 // first 4 bytes followed by zeroes. Does not execute a bounds check.
