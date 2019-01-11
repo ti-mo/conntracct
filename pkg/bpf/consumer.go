@@ -8,6 +8,11 @@ type AcctConsumer struct {
 	lost   uint64
 }
 
+// Close closes the AcctConsumer's event channel.
+func (ac *AcctConsumer) Close() {
+	close(ac.events)
+}
+
 // NewAcctConsumer returns a new AcctConsumer.
 func NewAcctConsumer(name string, events chan AcctEvent) *AcctConsumer {
 
@@ -21,6 +26,10 @@ func NewAcctConsumer(name string, events chan AcctEvent) *AcctConsumer {
 
 // RegisterConsumer registers an AcctConsumer in an AcctProbe.
 func (ap *AcctProbe) RegisterConsumer(ac *AcctConsumer) error {
+
+	if ac == nil {
+		return errConsumerNil
+	}
 
 	ap.consumerMu.Lock()
 	defer ap.consumerMu.Unlock()
@@ -38,13 +47,17 @@ func (ap *AcctProbe) RegisterConsumer(ac *AcctConsumer) error {
 }
 
 // RemoveConsumer removes an AcctConsumer from the AcctProbe's consumer list.
-func (ap *AcctProbe) RemoveConsumer(name string) error {
+func (ap *AcctProbe) RemoveConsumer(ac *AcctConsumer) error {
+
+	if ac == nil {
+		return errConsumerNil
+	}
 
 	ap.consumerMu.Lock()
 	defer ap.consumerMu.Unlock()
 
 	for i, c := range ap.consumers {
-		if c.name == name {
+		if c.name == ac.name {
 			// From https://github.com/golang/go/wiki/SliceTricks
 			// Avoid memory leaks since we're dealing with a slice of pointers.
 
