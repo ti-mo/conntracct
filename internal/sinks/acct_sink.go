@@ -25,13 +25,18 @@ type AcctSink interface {
 
 // AcctSinkConfig represents the configuration of an accounting sink.
 type AcctSinkConfig struct {
-	Name        string
-	Addr        string
-	PayloadSize uint16
-
-	// Flush batch when it holds this many points
+	// Flush batch when it holds this many points.
 	BatchWatermark uint32
 
-	// Whether or not the sink should receive the flows' source ports
+	// Whether or not the sink should receive the flows' source ports.
 	EnableSrcPort bool
+
+	// Maximum network payload size, for UDP-based sinks.
+	PayloadSize uint16
+
+	// Name of the sink.
+	Name string
+
+	// Target address of the sink's backing driver.
+	Addr string
 }
