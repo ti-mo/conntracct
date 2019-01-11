@@ -127,9 +127,26 @@ func (ap *AcctProbe) Start() error {
 }
 
 // Stop stops the BPF program and releases all its related resources.
-// TODO: Implement this properly.
+// Closes all AcctProbe's channels. Can only be called after Start().
 func (ap *AcctProbe) Stop() error {
-	return ap.module.Close()
+
+	ap.startMu.Lock()
+	defer ap.startMu.Unlock()
+
+	if !ap.started {
+		return errProbeNotStarted
+	}
+
+	// Releases all gobpf-internal resources, including the perfMap poller.
+	if err := ap.module.Close(); err != nil {
+		return err
+	}
+
+	close(ap.lostChan)
+	close(ap.perfChan)
+	close(ap.errChan)
+
+	return nil
 }
 
 // Kernel returns the target kernel structure of the selected probe.
