@@ -131,10 +131,11 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   // Sample accounting events from the kernel using a hybrid rate limiting model.
   // On every event that is sent, a future deadline is set for that specific flow
   // equal to the cooldown time. Every packet that is handled when the dealine has
-  // not yet come, has to either be the 2nd, 8th or 32nd total packet in the flow
+  // not yet come, has to either be the 1st, 2nd, 8th or 32nd total packet in the flow
   // to be sent as an event. This ensures that flows generate an event at least and
-  // at most once per deadline. Packet 2, 8 and 32 are always sent, and also increase
-  // the deadline.
+  // at most once per deadline.
+  // Packets 1, 2, 8 and 32 are always sent and also increase the deadline. The first
+  // packet is always sent because the current timestamp is always past the default (0).
 
   // Look up the cooldown value in the config map.
   u64 *cdp = bpf_map_lookup_elem(&config, &config_cd);
