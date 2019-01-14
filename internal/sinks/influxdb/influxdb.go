@@ -7,6 +7,7 @@ import (
 
 	influx "github.com/influxdata/influxdb/client/v2"
 	"gitlab.com/0ptr/conntracct/internal/sinks"
+	"gitlab.com/0ptr/conntracct/pkg/boottime"
 	"gitlab.com/0ptr/conntracct/pkg/bpf"
 )
 
@@ -17,38 +18,41 @@ const (
 // InfluxAcctSink is an accounting sink implementing an InfluxDB client.
 type InfluxAcctSink struct {
 
-	// name of the sink
+	// Name of the sink.
 	name string
 
-	// sink had Init() called on it successfully
+	// Sink had Init() called on it successfully.
 	init bool
 
-	// reference to the sink's configuration
+	// Sink's configuration object.
 	config sinks.AcctSinkConfig
 
-	// influx driver client handle
+	// Boot time of the machine. (estimated)
+	bootTime time.Time
+
+	// Influx driver client handle.
 	client influx.Client
 
-	// channel the workers receive influx batches on
+	// Channel the network workers receive influx batches on.
 	sendChan chan influx.BatchPoints
 
-	// data point batch
+	// Data point batch.
 	batchMu sync.Mutex
 	batch   influx.BatchPoints
 
-	// sink stats
+	// Sink stats.
 	stats sinks.AcctSinkStats
 }
 
 // Init initializes the InfluxDB accounting sink.
 func (s *InfluxAcctSink) Init(sc sinks.AcctSinkConfig) error {
 
-	// Make sure the sink has a name given in its configuration
+	// Make sure the sink has a name given in its configuration.
 	if sc.Name == "" {
 		return errSinkName
 	}
 
-	// Construct InfluxDB UDP configuration and client
+	// Construct InfluxDB UDP configuration and client.
 	conf := influx.UDPConfig{
 		Addr:        sc.Addr,
 		PayloadSize: int(sc.PayloadSize),
@@ -59,12 +63,15 @@ func (s *InfluxAcctSink) Init(sc sinks.AcctSinkConfig) error {
 		return err
 	}
 
-	// Set default batch watermark
+	// Set default batch watermark.
 	if sc.BatchWatermark == 0 {
 		sc.BatchWatermark = defaultBatchWatermark
 	}
 
-	// Make a buffered channel for sendworkers
+	// Obtain the machine's boot time, for absolute event timestamps.
+	s.bootTime = boottime.Estimate()
+
+	// Make a buffered channel for sendworkers.
 	s.sendChan = make(chan influx.BatchPoints, 64)
 
 	s.newBatch()     // initial empty batch
@@ -75,7 +82,7 @@ func (s *InfluxAcctSink) Init(sc sinks.AcctSinkConfig) error {
 	go s.sendWorker()
 	go s.tickWorker()
 
-	// Mark the sink as initialized
+	// Mark the sink as initialized.
 	s.init = true
 
 	return nil
@@ -85,7 +92,7 @@ func (s *InfluxAcctSink) Init(sc sinks.AcctSinkConfig) error {
 // Adds data points to the InfluxDB client buffer in a thread-safe manner.
 func (s *InfluxAcctSink) Push(e bpf.AcctEvent) {
 
-	// Create a point and add to batch
+	// Create a point and add to batch.
 	tags := map[string]string{
 		"conn_id":  strconv.FormatUint(uint64(e.ConnectionID), 10),
 		"src_addr": e.SrcAddr.String(),
@@ -112,25 +119,28 @@ func (s *InfluxAcctSink) Push(e bpf.AcctEvent) {
 		"packets_ret":  int64(e.PacketsRet),
 	}
 
-	pt, err := influx.NewPoint("ct_acct", tags, fields, time.Now())
+	// To obtain the absolute time stamp of an event in kernel space,
+	// we add its (monotonic) time stamp to the estimated boot time of the kernel.
+	ts := s.bootTime.Add(time.Duration(e.Timestamp))
+
+	pt, err := influx.NewPoint("ct_acct", tags, fields, ts)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	// Add the point to the batch
+	// Add the point to the batch.
 	s.batchMu.Lock()
 	s.batch.AddPoint(pt)
 
 	batchLen := len(s.batch.Points())
 
-	// Record statistics
-	// Manually manage sink stats lock to update counters in one transaction
+	// Record statistics.
 	s.stats.Lock()
 	s.stats.Data.BatchLength = batchLen
 	s.stats.Data.EventsPushed++
 	s.stats.Unlock()
 
-	// Flush the batch when the watermark is reached
+	// Flush the batch when the watermark is reached.
 	if batchLen >= int(s.config.BatchWatermark) {
 		s.sendChan <- s.batch
 		s.newBatch()
