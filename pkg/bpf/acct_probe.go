@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const acctPerfMap = "acct_events"
+const acctPerfMap = "perf_acct_update"
 
 // AcctProbe is an instance of a BPF probe running in the kernel.
 type AcctProbe struct {

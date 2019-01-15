@@ -4,8 +4,10 @@
 #define KBUILD_MODNAME "empty" // Required for including printk.h
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_acct.h>
+#include <net/netfilter/nf_conntrack_timestamp.h>
 
 struct acct_event_t {
+  u64 start;
   u64 ts;
   u32 cid;
   u32 connmark;
@@ -48,7 +50,29 @@ static int get_acct_ext(struct nf_conn_acct **acct_ext, struct nf_conn *ct) {
   return 0;
 }
 
-// extract_counters extracts accounting info from an nf_conn_act into acct_event_t.
+// get_ts_ext gets a reference to the nf_conn's timestamp extension.
+// Returns non-zero on error.
+__attribute__((always_inline))
+static int get_ts_ext(struct nf_conn_tstamp **ts_ext, struct nf_conn *ct) {
+
+  struct nf_ct_ext *ct_ext;
+  bpf_probe_read(&ct_ext, sizeof(ct_ext), &ct->ext);
+  if (!ct_ext)
+    return -1;
+
+  u8 ct_ts_offset;
+  bpf_probe_read(&ct_ts_offset, sizeof(ct_ts_offset), &ct_ext->offset[NF_CT_EXT_TSTAMP]);
+  if (!ct_ts_offset)
+    return -1;
+
+  *ts_ext = ((void *)ct_ext + ct_ts_offset);
+  if (!*ts_ext)
+    return -1;
+
+  return 0;
+}
+
+// extract_counters extracts accounting info from an nf_conn_acct into acct_event_t.
 __attribute__((always_inline))
 static void extract_counters(struct acct_event_t *data, struct nf_conn_acct *acct_ext) {
 
@@ -61,6 +85,12 @@ static void extract_counters(struct acct_event_t *data, struct nf_conn_acct *acc
   data->packets_ret = ctr[IP_CT_DIR_REPLY].packets.counter;
   data->bytes_ret = ctr[IP_CT_DIR_REPLY].bytes.counter;
 
+}
+
+// extract_tstamp extracts the start timestamp of nf_conn_tstamp into acct_event_t.
+__attribute__((always_inline))
+static void extract_tstamp(struct acct_event_t *data, struct nf_conn_tstamp *ts_ext) {
+  bpf_probe_read(&data->start, sizeof(data->start), &ts_ext->start);
 }
 
 // extract_tuple extracts tuple information (proto, src/dest ip and port) of an nf_conn
@@ -98,7 +128,16 @@ static void extract_netns(struct acct_event_t *data, struct nf_conn *ct) {
   }
 }
 
-struct bpf_map_def SEC("maps/acct_events") acct_events = {
+struct bpf_map_def SEC("maps/perf_acct_update") perf_acct_update = {
+	.type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+	.key_size = sizeof(int),
+	.value_size = sizeof(__u32),
+	.max_entries = 1024,
+	.pinning = 0,
+	.namespace = "",
+};
+
+struct bpf_map_def SEC("maps/perf_acct_end") perf_acct_end = {
 	.type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
 	.key_size = sizeof(int),
 	.value_size = sizeof(__u32),
@@ -176,8 +215,9 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
 
   // Allocate event struct after all checks have succeeded.
   struct acct_event_t data = {
-    .cid = (u32)ct,
+    .start = 0,
     .ts = ts,
+    .cid = (u32)ct,
   };
 
   // Pull counters onto the BPF stack first, so that we can make event rate
@@ -231,7 +271,7 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
 
   // Submit event to userspace.
-  bpf_perf_event_output(ctx, &acct_events, CUR_CPU_IDENTIFIER, &data, sizeof(data));
+  bpf_perf_event_output(ctx, &perf_acct_update, CUR_CPU_IDENTIFIER, &data, sizeof(data));
 
   // Set the deadline to the current timestamp plus the cooldown period.
   next = ts + cd;
@@ -243,10 +283,33 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
 SEC("kprobe/nf_conntrack_free")
 int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
 
+  u64 ts = bpf_ktime_get_ns();
+
   struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
 
   // Remove next-update entry for connection.
   bpf_map_delete_elem(&nextupd, &ct);
+
+  struct nf_conn_acct *acct_ext = 0;
+  if (get_acct_ext(&acct_ext, ct))
+    return 0;
+
+  struct acct_event_t data = {
+    .start = 0,
+    .ts = ts,
+    .cid = (u32)ct,
+  };
+
+  struct nf_conn_tstamp *ts_ext = 0;
+  if (!get_ts_ext(&ts_ext, ct))
+    extract_tstamp(&data, ts_ext);
+
+  extract_counters(&data, acct_ext);
+  extract_tuple(&data, ct);
+  extract_netns(&data, ct);
+  bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
+
+  bpf_perf_event_output(ctx, &perf_acct_end, CUR_CPU_IDENTIFIER, &data, sizeof(data));
 
   return 0;
 }
