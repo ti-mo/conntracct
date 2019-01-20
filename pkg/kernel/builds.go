@@ -34,8 +34,11 @@ var params = map[string]Params{
 		"CONFIG_NETFILTER":          "y",
 		"CONFIG_NETFILTER_ADVANCED": "y",
 
-		"CONFIG_NF_CONNTRACK":           "m",
-		"CONFIG_NF_CONNTRACK_MARK":      "y",
+		"CONFIG_NF_CONNTRACK":      "m",
+		"CONFIG_NF_CONNTRACK_MARK": "y",
+
+		// changes alignment of the ct extensions enum for timestamp
+		"CONFIG_NF_CONNTRACK_EVENTS":    "y",
 		"CONFIG_NF_CONNTRACK_TIMESTAMP": "y",
 
 		"CONFIG_NF_NAT":    "m",
