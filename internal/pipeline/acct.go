@@ -1,39 +1,53 @@
 package pipeline
 
 import (
+	"sync/atomic"
+
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
 	"gitlab.com/0ptr/conntracct/pkg/bpf"
 )
 
-// InitAcct sets up the pipeline with an
-func (p *Pipeline) InitAcct() error {
+// Init initializes the pipeline. Only runs once, subsequent calls are no-ops.
+func (p *Pipeline) Init() error {
 
-	p.acctMu.Lock()
-	defer p.acctMu.Unlock()
+	var err error
+	p.init.Do(func() {
+		err = p.initAcct()
+	})
 
-	if p.acctProbe != nil {
-		return errAcctAlreadyInitialized
-	}
+	return err
+}
 
+// initAcct initializes the accounting probe and consumers.
+// Should only be called once, eg. gated behind a sync.Once.
+func (p *Pipeline) initAcct() error {
 	cfg := bpf.AcctConfig{CooldownMillis: 2000}
-
-	p.acctChan = make(chan bpf.AcctEvent, 1024)
 
 	// Create a new accounting probe.
 	ap, err := bpf.NewAcctProbe(cfg)
 	if err != nil {
-		log.Fatalln("Initializing BPF probe:", err)
+		return errors.Wrap(err, "initializing BPF probe")
 	}
 	log.Infof("Inserted probe version %s", ap.Kernel().Version)
 
-	// Create and register a new accounting consumer using
-	// the pipeline's AcctEvent channel.
-	ac := bpf.NewAcctConsumer("AcctPipeline", p.acctChan)
-	if err := ap.RegisterConsumer(ac); err != nil {
-		log.Fatalln("Registering consumer to probe:", err)
+	// Store channel reference so we can launch consumers on them.
+	p.acctUpdateChan = make(chan bpf.AcctEvent, 1024)
+	p.acctDestroyChan = make(chan bpf.AcctEvent, 1024)
+
+	// Register accounting update/destroy event consumers.
+	au := bpf.NewAcctConsumer("AcctUpdate", p.acctUpdateChan, bpf.ConsumerUpdate)
+	if err := ap.RegisterConsumer(au); err != nil {
+		return errors.Wrap(err, "registering update consumer to probe")
 	}
-	log.Info("Registered probe consumer AcctPipeline")
+	log.Debug("Registered pipeline consumer AcctUpdate")
+
+	ad := bpf.NewAcctConsumer("AcctDestroy", p.acctDestroyChan, bpf.ConsumerDestroy)
+	if err := ap.RegisterConsumer(ad); err != nil {
+		return errors.Wrap(err, "registering destroy consumer to probe")
+	}
+	log.Debug("Registered pipeline consumer AcctDestroy")
 
 	// Save the AcctProbe reference to the pipeline.
 	p.acctProbe = ap
@@ -41,49 +55,91 @@ func (p *Pipeline) InitAcct() error {
 	return nil
 }
 
-// StartAcct starts the acctEventWorker and the AcctProbe,
-// and starts ingesting accounting events into the Pipeline.
-func (p *Pipeline) StartAcct() error {
-
-	p.acctMu.Lock()
-	defer p.acctMu.Unlock()
+// Start starts all resources registered to the pipeline.
+func (p *Pipeline) Start() error {
 
 	if p.acctProbe == nil {
 		return errAcctNotInitialized
 	}
 
-	// Start the conntracct event consumer.
-	go p.acctEventWorker(p.acctChan)
-
-	// Start the AcctProbe.
-	if err := p.acctProbe.Start(); err != nil {
-		log.Fatalln("Starting AcctProbe:", err)
-	}
-	log.Info("Started BPF accounting probe")
+	p.start.Do(func() {
+		p.startAcct()
+	})
 
 	return nil
 }
 
-// acctEventWorker receives from a bpf.AcctEvent channel
-// and delivers to all AcctEvent sinks registered to the pipeline.
-// TODO: Allow multiple instances of this goroutine to be run.
-func (p *Pipeline) acctEventWorker(aec chan bpf.AcctEvent) {
+// startAcct starts the AcctProbe and starts goroutines reading AcctEvents from
+// update and destroy channels.
+func (p *Pipeline) startAcct() error {
+
+	// Start the conntracct event consumer.
+	go p.acctUpdateWorker()
+	go p.acctDestroyWorker()
+
+	// Start the AcctProbe.
+	if err := p.acctProbe.Start(); err != nil {
+		return errors.Wrap(err, "starting AcctProbe")
+	}
+
+	log.Info("Started accounting probe and workers")
+
+	return nil
+}
+
+// acctUpdateWorker reads from the pipeline's update event channel
+// and delivers events to all registered sinks listening for update events.
+// This code closely resembles acctDestroyWorker due to this being in the hot
+// path, avoiding as much branching and unnecessary work as possible.
+func (p *Pipeline) acctUpdateWorker() {
 	for {
-		ae, ok := <-aec
+		ae, ok := <-p.acctUpdateChan
 		if !ok {
-			log.Info("AcctEvent channel closed, stopping acctEventWorker")
+			log.Debug("Pipeline's update event channel closed, stopping worker.")
 			break
 		}
 
-		// Save last-received perf count to ingest object
-		// TODO: Make thread-safe
-		p.Stats.AcctPerfEvents = ae.EventID
-		p.Stats.AcctPerfBytes = ae.EventID * bpf.AcctEventLength
-		p.Stats.AcctEventQueueLen = len(aec)
+		// Record pipeline statistics.
+		atomic.AddUint64(&p.Stats.AcctEventsTotal, 1)
+		atomic.AddUint64(&p.Stats.AcctBytesTotal, bpf.AcctEventLength)
+		atomic.AddUint64(&p.Stats.AcctEventsUpdate, 1)
+		atomic.AddUint64(&p.Stats.AcctBytesUpdate, bpf.AcctEventLength)
+		atomic.StoreUint64(&p.Stats.AcctUpdateQueueLen, uint64(len(p.acctUpdateChan)))
 
 		// Fan out to all registered accounting sinks.
+		p.acctSinkMu.RLock()
 		for _, s := range p.acctSinks {
-			s.Push(ae)
+			if s.WantUpdate() {
+				s.Push(ae)
+			}
 		}
+		p.acctSinkMu.RUnlock()
+	}
+}
+
+// acctDestroyWorker is a copy of acctUpdateWorker, but for destroy events.
+func (p *Pipeline) acctDestroyWorker() {
+	for {
+		ae, ok := <-p.acctDestroyChan
+		if !ok {
+			log.Debug("Pipeline's destroy event channel closed, stopping worker.")
+			break
+		}
+
+		// Record pipeline statistics.
+		atomic.AddUint64(&p.Stats.AcctEventsTotal, 1)
+		atomic.AddUint64(&p.Stats.AcctBytesTotal, bpf.AcctEventLength)
+		atomic.AddUint64(&p.Stats.AcctEventsDestroy, 1)
+		atomic.AddUint64(&p.Stats.AcctBytesDestroy, bpf.AcctEventLength)
+		atomic.StoreUint64(&p.Stats.AcctDestroyQueueLen, uint64(len(p.acctDestroyChan)))
+
+		// Fan out to all registered accounting sinks.
+		p.acctSinkMu.RLock()
+		for _, s := range p.acctSinks {
+			if s.WantDestroy() {
+				s.Push(ae)
+			}
+		}
+		p.acctSinkMu.RUnlock()
 	}
 }
