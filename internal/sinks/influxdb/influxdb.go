@@ -55,7 +55,7 @@ func (s *InfluxAcctSink) Init(sc sinks.AcctSinkConfig) error {
 	// Construct InfluxDB UDP configuration and client.
 	conf := influx.UDPConfig{
 		Addr:        sc.Addr,
-		PayloadSize: int(sc.PayloadSize),
+		PayloadSize: int(sc.UDPPayloadSize),
 	}
 
 	c, err := influx.NewUDPClient(conf)
@@ -135,10 +135,8 @@ func (s *InfluxAcctSink) Push(e bpf.AcctEvent) {
 	batchLen := len(s.batch.Points())
 
 	// Record statistics.
-	s.stats.Lock()
-	s.stats.Data.BatchLength = batchLen
-	s.stats.Data.EventsPushed++
-	s.stats.Unlock()
+	s.stats.SetBatchLength(batchLen)
+	s.stats.IncrEventsPushed()
 
 	// Flush the batch when the watermark is reached.
 	if batchLen >= int(s.config.BatchWatermark) {
@@ -159,9 +157,19 @@ func (s *InfluxAcctSink) IsInit() bool {
 	return s.init
 }
 
+// WantsUpdate always returns true.
+func (s *InfluxAcctSink) WantUpdate() bool {
+	return true
+}
+
+// WantsDestroy always returns true, InfluxDB receives destroy events. (flow totals)
+func (s *InfluxAcctSink) WantDestroy() bool {
+	return true
+}
+
 // Stats returns the InfluxDB accounting sink's statistics structure.
 func (s *InfluxAcctSink) Stats() sinks.AcctSinkStatsData {
-	return s.stats.Data
+	return s.stats.Get()
 }
 
 // New returns a new InfluxDB accounting sink.
