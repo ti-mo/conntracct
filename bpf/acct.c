@@ -290,6 +290,9 @@ int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
   // Remove next-update entry for connection.
   bpf_map_delete_elem(&nextupd, &ct);
 
+  // Below this point, the kprobe can return early,
+  // make sure all bookkeeping is handled above.
+
   struct nf_conn_acct *acct_ext = 0;
   if (get_acct_ext(&acct_ext, ct))
     return 0;
@@ -301,7 +304,7 @@ int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
   };
 
   struct nf_conn_tstamp *ts_ext = 0;
-  if (!get_ts_ext(&ts_ext, ct))
+  if (get_ts_ext(&ts_ext, ct) == 0)
     extract_tstamp(&data, ts_ext);
 
   extract_counters(&data, acct_ext);
