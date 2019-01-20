@@ -31,15 +31,15 @@ func main() {
 		log.Fatalln("Error registering sink:", err)
 	}
 
-	// Initialize and start accounting infrastructure.
-	if err := pipe.InitAcct(); err != nil {
-		log.Fatalln("Error initializing accounting:", err)
+	// Initialize and start accounting pipeline.
+	if err := pipe.Init(); err != nil {
+		log.Fatalln("Error initializing pipeline:", err)
 	}
-	if err := pipe.StartAcct(); err != nil {
-		log.Fatalln("Error starting accounting:", err)
+	if err := pipe.Start(); err != nil {
+		log.Fatalln("Error starting pipeline:", err)
 	}
 
-	// Initialize and run the API server
+	// Initialize and run the API server.
 	apiserver.Init(pipe)
 	apiserver.Run(":8000")
 
@@ -53,7 +53,7 @@ func main() {
 		log.Fatalf("Error applying system configuration: %v", err)
 	}
 
-	// Wait for program to be interrupted
+	// Wait for program to be interrupted.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
