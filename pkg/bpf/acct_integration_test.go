@@ -75,7 +75,7 @@ func TestMain(m *testing.M) {
 func TestAcctProbeStartup(t *testing.T) {
 
 	// Create and register consumer.
-	ac, in := newConsumer(t)
+	ac, in := newUpdateConsumer(t)
 	defer ac.Close()
 
 	// Create UDP client.
@@ -119,7 +119,7 @@ func TestAcctProbeStartup(t *testing.T) {
 func TestAcctProbeLongterm(t *testing.T) {
 
 	// Create and register consumer.
-	ac, in := newConsumer(t)
+	ac, in := newUpdateConsumer(t)
 	defer ac.Close()
 
 	// Create UDP client.
@@ -169,7 +169,7 @@ func TestAcctProbeLongterm(t *testing.T) {
 func TestAcctProbeVerify(t *testing.T) {
 
 	// Create and register consumer.
-	ac, in := newConsumer(t)
+	ac, in := newUpdateConsumer(t)
 	defer ac.Close()
 
 	// Create UDP client.
@@ -256,10 +256,10 @@ func readTimeout(c <-chan AcctEvent, ms uint) (AcctEvent, error) {
 	}
 }
 
-// newConsumer creates and registers an AcctConsumer for a test.
-func newConsumer(t *testing.T) (*AcctConsumer, chan AcctEvent) {
+// newUpdateConsumer creates and registers an AcctConsumer for a test.
+func newUpdateConsumer(t *testing.T) (*AcctConsumer, chan AcctEvent) {
 	c := make(chan AcctEvent, 2048)
-	ac := NewAcctConsumer(t.Name(), c)
+	ac := NewAcctConsumer(t.Name(), c, ConsumerUpdate)
 	require.NoError(t, acctProbe.RegisterConsumer(ac))
 
 	return ac, c

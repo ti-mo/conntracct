@@ -1,27 +1,55 @@
 package bpf
 
+// ConsumerMode defines whether the consumer
+// receives updates, destroys, or both.
+type ConsumerMode uint8
+
+// Kind of events the consumer subscribes to.
+const (
+	ConsumerUpdate  ConsumerMode = 1
+	ConsumerDestroy ConsumerMode = 2
+	ConsumerAll     ConsumerMode = (ConsumerUpdate | ConsumerDestroy)
+)
+
 // An AcctConsumer is a consumer of accounting events.
 type AcctConsumer struct {
 	name string
 
 	events chan AcctEvent
 	lost   uint64
+
+	mode ConsumerMode // bitfield for which events to subscribe to
+}
+
+// NewAcctConsumer returns a new AcctConsumer.
+func NewAcctConsumer(name string, events chan AcctEvent, mode ConsumerMode) *AcctConsumer {
+
+	if mode == 0 {
+		mode = ConsumerAll
+	}
+
+	ac := AcctConsumer{
+		name:   name,
+		events: events,
+		mode:   mode,
+	}
+
+	return &ac
+}
+
+// WantUpdate returns whether or not this consumer wants to receive update events.
+func (ac *AcctConsumer) WantUpdate() bool {
+	return (ac.mode & ConsumerUpdate) > 0
+}
+
+// WantDestroy returns whether or not this consumer wants to receive destroy events.
+func (ac *AcctConsumer) WantDestroy() bool {
+	return (ac.mode & ConsumerDestroy) > 0
 }
 
 // Close closes the AcctConsumer's event channel.
 func (ac *AcctConsumer) Close() {
 	close(ac.events)
-}
-
-// NewAcctConsumer returns a new AcctConsumer.
-func NewAcctConsumer(name string, events chan AcctEvent) *AcctConsumer {
-
-	ac := AcctConsumer{
-		name:   name,
-		events: events,
-	}
-
-	return &ac
 }
 
 // RegisterConsumer registers an AcctConsumer in an AcctProbe.

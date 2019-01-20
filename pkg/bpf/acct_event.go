@@ -13,8 +13,8 @@ const AcctEventLength = 104
 // AcctEvent is a kernelspace probe delivered
 // by the 'acct' BPF program.
 type AcctEvent struct {
-	Start        uint64
-	Timestamp    uint64
+	Start        uint64 // epoch timestamp of flow start
+	Timestamp    uint64 // ktime timestamp of event
 	ConnectionID uint32
 	Connmark     uint32
 	SrcAddr      net.IP
@@ -27,9 +27,6 @@ type AcctEvent struct {
 	DstPort      uint16
 	NetNS        uint32
 	Proto        uint8
-
-	// Decoder metadata for monitoring/tracing
-	EventID uint64
 }
 
 // UnmarshalBinary unmarshals a binary AcctEvent representation

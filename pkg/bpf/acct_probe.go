@@ -11,14 +11,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-const acctPerfMap = "perf_acct_update"
+const perfUpdateMap = "perf_acct_update"
+const perfDestroyMap = "perf_acct_end"
 
 // AcctProbe is an instance of a BPF probe running in the kernel.
 type AcctProbe struct {
 
 	// gobpf/elf objects.
-	module  *elf.Module
-	perfMap *elf.PerfMap
+	module      *elf.Module
+	perfUpdate  *elf.PerfMap
+	perfDestroy *elf.PerfMap
 
 	// Target kernel of the loaded probe.
 	kernel kernel.Kernel
@@ -32,8 +34,9 @@ type AcctProbe struct {
 	lost     uint64
 
 	// Communication channels with the perfWorker.
-	perfChan chan []byte
-	errChan  chan error
+	perfUpdateChan  chan []byte
+	perfDestroyChan chan []byte
+	errChan         chan error
 
 	// Started status of the probe.
 	startMu sync.Mutex
@@ -97,16 +100,23 @@ func (ap *AcctProbe) Start() error {
 		}
 	}
 
-	ap.perfChan = make(chan []byte, 1024)
+	ap.perfUpdateChan = make(chan []byte, 1024)
+	ap.perfDestroyChan = make(chan []byte, 1024)
 	ap.lostChan = make(chan uint64)
 	ap.errChan = make(chan error)
 
-	// Set up the acct_events perf map with an event and lost channel.
-	pm, err := elf.InitPerfMap(ap.module, acctPerfMap, ap.perfChan, ap.lostChan)
+	// Set up perf maps with an event and lost channel.
+	um, err := elf.InitPerfMap(ap.module, perfUpdateMap, ap.perfUpdateChan, ap.lostChan)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("InitPerfMap %s", acctPerfMap))
+		return errors.Wrap(err, fmt.Sprintf("InitPerfMap %s", perfUpdateMap))
 	}
-	ap.perfMap = pm
+	ap.perfUpdate = um
+
+	dm, err := elf.InitPerfMap(ap.module, perfDestroyMap, ap.perfDestroyChan, ap.lostChan)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("InitPerfMap %s", perfUpdateMap))
+	}
+	ap.perfDestroy = dm
 
 	// Start the event message decoder and fanout worker.
 	go perfWorker(ap)
@@ -114,9 +124,9 @@ func (ap *AcctProbe) Start() error {
 	// Start worker counting the amount of lost messages.
 	go lostWorker(ap)
 
-	// Start polling the BPF perf ring buffer, starting message flow
-	// into the AcctProbe's perfChan.
-	pm.PollStart()
+	// Start polling the BPF perf ring buffer, into update and destroy chans.
+	um.PollStart()
+	dm.PollStart()
 
 	ap.started = true
 
@@ -140,7 +150,8 @@ func (ap *AcctProbe) Stop() error {
 	}
 
 	close(ap.lostChan)
-	close(ap.perfChan)
+	close(ap.perfUpdateChan)
+	close(ap.perfDestroyChan)
 	close(ap.errChan)
 
 	return nil
@@ -174,45 +185,33 @@ func (ap *AcctProbe) sendError(err error) bool {
 
 // perfWorker reads binary events from the AcctProbe's event channel,
 // unmarshals the events into AcctEvents and sends them on all registered
-// consumers' event channels. Exits if perfChan is closed.
+// consumers' event channels. Exits if perfUpdateChan or perfDestroyChan are closed.
 func perfWorker(ap *AcctProbe) {
-
-	var eventID uint64
 
 	var eb []byte
 	var ok bool
+	var update bool
 
 	for {
-		// Receive binary acct_event struct from BPF.
-		eb, ok = <-ap.perfChan
+		select {
+		case eb, ok = <-ap.perfUpdateChan:
+			update = true
+		case eb, ok = <-ap.perfDestroyChan:
+			update = false
+		}
+
 		if !ok {
 			// Channel closed.
 			return
 		}
 
 		var ae AcctEvent
-		err := ae.UnmarshalBinary(eb)
-		if err != nil {
+		if err := ae.UnmarshalBinary(eb); err != nil {
 			ap.sendError(errors.Wrap(err, "error unmarshaling AcctEvent byte array"))
 		}
 
-		// Increment goroutine's event counter and send in acct message.
-		eventID++
-		ae.EventID = eventID
-
 		// Fanout to all registered consumers.
-		ap.consumerMu.RLock()
-		for _, c := range ap.consumers {
-			// Non-blocking send on the consumer's event channel.
-			select {
-			case c.events <- ae:
-			default:
-				// Increment the consumer's lost counter if AcctEvent
-				// could not be sent on the channel.
-				atomic.AddUint64(&c.lost, 1)
-			}
-		}
-		ap.consumerMu.RUnlock()
+		ap.fanoutEvent(ae, update)
 	}
 }
 
@@ -229,4 +228,31 @@ func lostWorker(ap *AcctProbe) {
 
 		atomic.AddUint64(&ap.lost, 1)
 	}
+}
+
+// fanoutEvent sends the given AcctEvent to all registered consumers.
+// The update flag specifies whether the event is an update (true) or destroy
+// (false) event.
+func (ap *AcctProbe) fanoutEvent(ae AcctEvent, update bool) {
+
+	// Take a read lock on the consumers so we don't send to closed or already
+	// unregistered consumer channels.
+	ap.consumerMu.RLock()
+
+	for _, c := range ap.consumers {
+		// Require the update/destroy condition of the event to match
+		// the requested event type of the consumer.
+		if (update && c.WantUpdate()) || (!update && c.WantDestroy()) {
+			// Non-blocking send to the consumer's event channel.
+			select {
+			case c.events <- ae:
+			default:
+				// If the channel can't be written to immediately,
+				// increment the consumer's lost counter.
+				atomic.AddUint64(&c.lost, 1)
+			}
+		}
+	}
+
+	ap.consumerMu.RUnlock()
 }
