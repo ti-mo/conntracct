@@ -61,6 +61,12 @@ func (p *Pipeline) RegisterAcctSink(s sinks.AcctSink) error {
 		return errSinkNotInit
 	}
 
+	// Warn the user about conntrack wait timeouts
+	// if the sink consumes destroy events.
+	if s.WantDestroy() {
+		warnSysctl()
+	}
+
 	p.acctSinkMu.Lock()
 	defer p.acctSinkMu.Unlock()
 
