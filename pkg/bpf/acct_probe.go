@@ -2,6 +2,7 @@ package bpf
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -72,6 +73,8 @@ func NewAcctProbe(cfg AcctConfig) (*AcctProbe, error) {
 	// Load the module from the bytes.Reader and insert into the kernel.
 	ap.module = elf.NewModuleFromReader(br)
 	if err := ap.module.Load(nil); err != nil {
+		// Error string from go-bpf can contain many NUL characters and need to be trimmed.
+		err = errors.New(strings.TrimRight(err.Error(), "\x00"))
 		return nil, errors.Wrap(err, "failed to load ELF binary")
 	}
 
