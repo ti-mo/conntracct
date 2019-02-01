@@ -3,6 +3,7 @@ package influxdb
 import "errors"
 
 var (
-	errSinkName = errors.New("sink name is empty")
-	errSinkMode = errors.New("sink mode is zero")
+	errEmptySinkName    = errors.New("empty sink name")
+	errEmptySinkAddress = errors.New("empty sink address")
+	errInvalidSinkType  = errors.New("invalid sink type")
 )

@@ -45,9 +45,13 @@ func Run(addr string) error {
 	r.HandleFunc("/stats", HandleStats)
 
 	http.Handle("/", r)
-	go http.ListenAndServe(addr, r)
+	go func() {
+		if err := http.ListenAndServe(addr, r); err != nil {
+			log.Fatalf("Error in http listener: %s", err)
+		}
+	}()
 
-	log.Infof("Listening on address '%s'", addr)
+	log.Infof("API server listening on address '%s'", addr)
 
 	return nil
 }

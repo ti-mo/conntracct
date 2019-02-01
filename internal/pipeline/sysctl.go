@@ -11,7 +11,7 @@ import (
 var (
 	warnOnce sync.Once
 
-	SysctlWait = map[string]int{
+	sysctlWait = map[string]int{
 		// TODO: UDP timeouts depend on the use case of the gateway,
 		// give the user the chance to opt out of these warnings.
 
@@ -33,7 +33,7 @@ func warnSysctl() {
 func warnSysctlWait() {
 	var warned bool
 
-	for k, v := range SysctlWait {
+	for k, v := range sysctlWait {
 		curStr, err := sysctl.Get(k)
 		if err != nil {
 			continue

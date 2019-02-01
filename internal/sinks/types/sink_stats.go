@@ -1,14 +1,14 @@
-package sinks
+package types
 
 import "sync/atomic"
 
-// AcctSinkStats is an embeddable struct holding an AcctSinkStatsData.
-type AcctSinkStats struct {
-	data AcctSinkStatsData
+// SinkStats is an embeddable struct holding an SinkStatsData.
+type SinkStats struct {
+	data SinkStatsData
 }
 
-// AcctSinkStatsData holds performance metrics about the the accounting sink.
-type AcctSinkStatsData struct {
+// SinkStatsData holds performance metrics about the the accounting sink.
+type SinkStatsData struct {
 	EventsPushed uint64 `json:"events_pushed"`
 
 	BatchLength    uint64 `json:"batch_length"`
@@ -17,28 +17,28 @@ type AcctSinkStatsData struct {
 }
 
 // IncrEventsPushed atomically increases the sink's event counter by one.
-func (s *AcctSinkStats) IncrEventsPushed() {
+func (s *SinkStats) IncrEventsPushed() {
 	atomic.AddUint64(&s.data.EventsPushed, 1)
 }
 
 // SetBatchLength sets the length of the current batch.
-func (s *AcctSinkStats) SetBatchLength(l int) {
+func (s *SinkStats) SetBatchLength(l int) {
 	atomic.StoreUint64(&s.data.BatchLength, uint64(l))
 }
 
 // IncrBatchDropped atomically increases the sink's dropped batch counter by one.
-func (s *AcctSinkStats) IncrBatchDropped() {
+func (s *SinkStats) IncrBatchDropped() {
 	atomic.AddUint64(&s.data.BatchesDropped, 1)
 }
 
 // IncrBatchSent atomically increases the sink's sent batch counter by one.
-func (s *AcctSinkStats) IncrBatchSent() {
+func (s *SinkStats) IncrBatchSent() {
 	atomic.AddUint64(&s.data.BatchesSent, 1)
 }
 
 // Get returns a non-atomic snapshot of the stats data.
-func (s *AcctSinkStats) Get() AcctSinkStatsData {
-	return AcctSinkStatsData{
+func (s *SinkStats) Get() SinkStatsData {
+	return SinkStatsData{
 		EventsPushed:   atomic.LoadUint64(&s.data.EventsPushed),
 		BatchLength:    atomic.LoadUint64(&s.data.BatchLength),
 		BatchesSent:    atomic.LoadUint64(&s.data.BatchesSent),

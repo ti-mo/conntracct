@@ -62,11 +62,12 @@ func (p *Pipeline) Start() error {
 		return errAcctNotInitialized
 	}
 
+	var err error
 	p.start.Do(func() {
-		p.startAcct()
+		err = p.startAcct()
 	})
 
-	return nil
+	return err
 }
 
 // startAcct starts the AcctProbe and starts goroutines reading AcctEvents from

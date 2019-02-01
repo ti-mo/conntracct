@@ -8,7 +8,7 @@ import (
 
 // sendWorker receives batches from the sink's send channel
 // and uses the InfluxDB client to send it to the database.
-func (s *InfluxAcctSink) sendWorker() {
+func (s *InfluxSink) sendWorker() {
 
 	for {
 
@@ -30,7 +30,7 @@ func (s *InfluxAcctSink) sendWorker() {
 
 // tickWorker starts a ticker that periodically flushes the active batch.
 // If the batch is empty when the ticker fires, no action is taken.
-func (s *InfluxAcctSink) tickWorker() {
+func (s *InfluxSink) tickWorker() {
 
 	t := time.NewTicker(time.Second)
 

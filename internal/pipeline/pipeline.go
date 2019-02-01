@@ -22,7 +22,7 @@ type Pipeline struct {
 	acctDestroyChan chan bpf.AcctEvent
 
 	acctSinkMu sync.RWMutex
-	acctSinks  []sinks.AcctSink
+	acctSinks  []sinks.Sink
 }
 
 // Stats holds various statistics and information about the
@@ -52,9 +52,9 @@ func New() *Pipeline {
 	return &Pipeline{}
 }
 
-// RegisterAcctSink registers a sink for accounting data
+// RegisterSink registers a sink for accounting data
 // to the pipeline.
-func (p *Pipeline) RegisterAcctSink(s sinks.AcctSink) error {
+func (p *Pipeline) RegisterSink(s sinks.Sink) error {
 
 	// Make sure the sink is initialized before using.
 	if !s.IsInit() {
@@ -78,8 +78,8 @@ func (p *Pipeline) RegisterAcctSink(s sinks.AcctSink) error {
 	return nil
 }
 
-// GetAcctSinks gets a list of accounting sinks registered to the pipeline.
-func (p *Pipeline) GetAcctSinks() []sinks.AcctSink {
+// GetSinks gets a list of accounting sinks registered to the pipeline.
+func (p *Pipeline) GetSinks() []sinks.Sink {
 
 	p.acctSinkMu.RLock()
 	defer p.acctSinkMu.RUnlock()
@@ -87,13 +87,8 @@ func (p *Pipeline) GetAcctSinks() []sinks.AcctSink {
 	return p.acctSinks
 }
 
-// Cleanup gracefully tears down all resources of a Pipeline structure.
-func (p *Pipeline) Cleanup() error {
-
+// Stop gracefully tears down all resources of a Pipeline structure.
+func (p *Pipeline) Stop() error {
 	// Stop the accounting probe.
-	if err := p.acctProbe.Stop(); err != nil {
-		return err
-	}
-
-	return nil
+	return p.acctProbe.Stop()
 }
