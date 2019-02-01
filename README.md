@@ -3,15 +3,45 @@
 Conntracct is a tool for extracting network flow information from Linux hosts,
 firewalls, gateways, container or virtualization hosts, even mid- to high-end
 embedded devices. It does not capture or analyze packets in any way, but hooks
-into Conntrack's accounting (acct) subsystem using eBPF to receive events when
-a flow's counters are updated, with a very low overhead.
+into Conntrack's accounting (acct) subsystem using eBPF to obtain packet/byte
+counters, minimizing overhead.
 
 ---
 
+## Overview
+
+Conntracct is built around a real-time metrics pipeline that supports one or
+more time-series sinks to be attached. This allows for sending real-time
+packet/byte counters to eg. InfluxDB, where they can be queried for a live
+visualization.
+
+The project aims to support unmodified kernels of most major distributions
+that are Linux 4.9 or higher. No compatibility matrix yet, but some versions of
+Fedora and Arch up to kernels 4.19 have been tested.
+
+No flashy tech demo yet, Coming Soon. (tm)
+
+## Roadmap
+
+The major challenges of targeting amd64 Linux machines are mostly solved.
+This is a small list of features that are planned to
+
+- [x] Compile C-based eBPF probe against multiple kernel versions concurrently
+- [x] InfluxDB sink driver for real-time flow metrics
+- [x] StdOut/Err sink driver for testing and debugging
+- [ ] Community-provided Grafana dashboards for InfluxDB and Elastic back-ends
+- [ ] Elasticsearch sink for archival of finished flows
+- [ ] Prometheus endpoint for monitoring pipeline internals
+- [ ] `conntracct test` subcommand to ship eBPF test suite with the binary
+- [ ] ARMv7 (aarch64) support (Odroid XU3/4+, RPi 3+, etc.)
+- [ ] Automated cross-distro test runner
+- [ ] Easy build procedure for targeting a single custom kernel
+- [ ] Pure-go eBPF implementation without Cgo (https://github.com/newtools/ebpf)
+
 ## Installing
 
-Get the latest binary from Releases. Conntracct does not need to run as root,
-but it needs the following capabilities:
+Get the latest binary from Releases. Conntracct needs the following
+capabilities:
 
 When using the BPF probe for real-time accounting events:
 
@@ -21,6 +51,34 @@ When using the BPF probe for real-time accounting events:
 
 When letting Conntracct manage sysctl:
 - `cap_net_admin` for managing `sysctl net.netfilter.nf_conntrack_acct`
+
+## Configuring
+
+While the configuration layout will definitely undergo changes in the near
+future, up-to-date examples can always be found in
+[`configs/`](https://github.com/ti-mo/conntracct/blob/master/configs/).
+Viper is used for configuration, so TOML and JSON can also be used.
+
+Default configuration search paths are (valid extensions are `yml`, `toml`, `json`):
+- `$HOME/.config/conntracct.yml`
+- `/etc/conntracct/conntracct.yml`
+
+Explicitly specify a config file with the global `-c`/`--config` flag.
+
+### iptables / nftables
+
+In order to make sure your host track outgoing connections, `iptables` or
+`nftables` need to be configured to do so. Keep in mind that all NAT'ed flows
+are automatically tracked by `conntrack`, this cannot be disabled (NAT relies
+on it). For example, if you're running Docker on your machine, traffic to and
+from your containers will likely already be tracked, depending on your network
+configuration.
+
+Track all outgoing IPv4 and IPv6 connections with:
+```
+sudo ip6tables -t filter -A OUTPUT -m conntrack --ctstate related,established -j ACCEPT
+sudo iptables -t filter -A OUTPUT -m conntrack --ctstate related,established -j ACCEPT
+```
 
 ## Building
 
@@ -53,3 +111,20 @@ This will launch a docker-compose stack, build the binary and run `modd` for
 live reloading on save.
 
 `go get github.com/cortesi/modd/cmd/modd`
+
+## Acknowledgements
+
+This project would not have been possible without WeaveWorks'
+[tcptracer-bpf](https://github.com/weaveworks/tcptracer-bpf). While I didn't
+take the approach of offset scanning, the ideas around packaging bytecode into
+the package with `statik` and the overall implementation of the tracer program
+were instrumental as an example for this project. Thanks, guys!
+
+## Getting Involved
+
+As always, pull requests and feedback are greatly appreciated.
+Don't hesitate to get in touch through any of the following channels:
+
+- #networking on Gophers Slack
+- File [an issue](https://github.com/ti-mo/conntracct/issues/new)
+- [E-mail me](mailto:timo@incline.eu) if you'd like to sponsor a new feature
