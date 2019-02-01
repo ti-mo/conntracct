@@ -1,0 +1,28 @@
+---
+# Conntracct Example Configuration
+
+# HTTP API endpoint.
+api_enabled: true
+api_endpoint: "localhost:8000"
+
+# Data Sinks (outputs)
+sinks:
+  influxdb_udp:
+    type: influxdb-udp
+    address: "localhost:8089"
+    batchSize: 200
+    sourcePorts: false
+    # udpPayloadSize: 512  # (default: 512) only change this on local networks within MTU
+
+  influxdb_http:
+    type: influxdb-http
+    address: "localhost:8086"
+    batchSize: 200
+    sourcePorts: false
+
+# Automatically configure necessary sysctls for Conntrack.
+sysctl_manage: true
+
+# Run a pprof endpoint during operation.
+pprof_enabled: false
+pprof_endpoint: "localhost:6060"

@@ -19,7 +19,7 @@ const (
 func Build() error {
 
 	// Watch for files newer than the app in these directories.
-	mod, err := target.Dir(app, "bpf", "pkg", "internal")
+	mod, err := target.Dir(app, "bpf", "pkg", "cmd", "internal")
 	if err != nil {
 		return err
 	}
@@ -68,6 +68,21 @@ func Dev() error {
 	}
 
 	return nil
+}
+
+// Generate runs `go generate` on all packages.
+func Generate() error {
+	if err := sh.RunV("go", "generate", "-x", "./..."); err != nil {
+		return err
+	}
+
+	fmt.Println("Successfully ran go generate.")
+	return nil
+}
+
+// Lint runs gometalinter on all packages. Excludes `gosec`
+func Lint() error {
+	return sh.RunV("gometalinter", "--vendor", "-D", "gosec", "--exclude", "magefile.*", "./...")
 }
 
 // realPath resolves (nested) symlinks. If the target of a nested symlink does
