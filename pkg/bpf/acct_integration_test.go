@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/0ptr/conntracct/pkg/udpecho"
+	"github.com/ti-mo/conntracct/pkg/udpecho"
 	"golang.org/x/sys/unix"
 )
 

@@ -7,10 +7,10 @@ import (
 
 	influx "github.com/influxdata/influxdb/client/v2"
 
-	"gitlab.com/0ptr/conntracct/internal/sinks/helpers"
-	"gitlab.com/0ptr/conntracct/internal/sinks/types"
-	"gitlab.com/0ptr/conntracct/pkg/boottime"
-	"gitlab.com/0ptr/conntracct/pkg/bpf"
+	"github.com/ti-mo/conntracct/internal/sinks/helpers"
+	"github.com/ti-mo/conntracct/internal/sinks/types"
+	"github.com/ti-mo/conntracct/pkg/boottime"
+	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 const (

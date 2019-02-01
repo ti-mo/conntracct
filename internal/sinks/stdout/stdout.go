@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"os"
 
-	"gitlab.com/0ptr/conntracct/internal/sinks/types"
-	"gitlab.com/0ptr/conntracct/pkg/bpf"
+	"github.com/ti-mo/conntracct/internal/sinks/types"
+	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 // StdOut is an accounting sink writing to standard output/error.

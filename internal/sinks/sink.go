@@ -3,10 +3,10 @@ package sinks
 import (
 	"fmt"
 
-	"gitlab.com/0ptr/conntracct/internal/sinks/influxdb"
-	"gitlab.com/0ptr/conntracct/internal/sinks/stdout"
-	"gitlab.com/0ptr/conntracct/internal/sinks/types"
-	"gitlab.com/0ptr/conntracct/pkg/bpf"
+	"github.com/ti-mo/conntracct/internal/sinks/influxdb"
+	"github.com/ti-mo/conntracct/internal/sinks/stdout"
+	"github.com/ti-mo/conntracct/internal/sinks/types"
+	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 // An Sink represents a timeseries database or other store

@@ -18,7 +18,7 @@
 package main
 
 import (
-	"gitlab.com/0ptr/conntracct/cmd"
+	"github.com/ti-mo/conntracct/cmd"
 )
 
 func main() {

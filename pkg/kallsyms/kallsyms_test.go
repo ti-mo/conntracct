@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/0ptr/conntracct/pkg/kallsyms"
+	"github.com/ti-mo/conntracct/pkg/kallsyms"
 )
 
 func TestKallsyms(t *testing.T) {

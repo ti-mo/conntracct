@@ -4,8 +4,8 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
-	"gitlab.com/0ptr/conntracct/internal/sinks"
-	"gitlab.com/0ptr/conntracct/pkg/bpf"
+	"github.com/ti-mo/conntracct/internal/sinks"
+	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 // Pipeline is a structure representing the conntracct

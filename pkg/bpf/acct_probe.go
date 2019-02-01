@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"gitlab.com/0ptr/conntracct/pkg/kernel"
+	"github.com/ti-mo/conntracct/pkg/kernel"
 
 	"github.com/iovisor/gobpf/elf"
 	"github.com/pkg/errors"

@@ -6,7 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gorilla/mux"
-	"gitlab.com/0ptr/conntracct/internal/pipeline"
+	"github.com/ti-mo/conntracct/internal/pipeline"
 )
 
 var (

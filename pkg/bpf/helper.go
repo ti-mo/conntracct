@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gitlab.com/0ptr/conntracct/pkg/kallsyms"
+	"github.com/ti-mo/conntracct/pkg/kallsyms"
 	"golang.org/x/sys/unix"
 )
 

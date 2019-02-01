@@ -11,11 +11,11 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"gitlab.com/0ptr/conntracct/internal/apiserver"
-	"gitlab.com/0ptr/conntracct/internal/config"
-	"gitlab.com/0ptr/conntracct/internal/pipeline"
-	"gitlab.com/0ptr/conntracct/internal/pprof"
-	"gitlab.com/0ptr/conntracct/internal/sinks/types"
+	"github.com/ti-mo/conntracct/internal/apiserver"
+	"github.com/ti-mo/conntracct/internal/config"
+	"github.com/ti-mo/conntracct/internal/pipeline"
+	"github.com/ti-mo/conntracct/internal/pprof"
+	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
 // runCmd represents the run command

@@ -12,7 +12,7 @@ import (
 	"github.com/magefile/mage/target"
 
 	"github.com/magefile/mage/mg"
-	"gitlab.com/0ptr/conntracct/pkg/kernel"
+	"github.com/ti-mo/conntracct/pkg/kernel"
 	"golang.org/x/sync/errgroup"
 )
 

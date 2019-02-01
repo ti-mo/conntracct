@@ -8,7 +8,7 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/rakyll/statik/fs"
-	"gitlab.com/0ptr/conntracct/pkg/kernel"
+	"github.com/ti-mo/conntracct/pkg/kernel"
 )
 
 // Select returns a bytes.Reader holding the BPF program to be used for

@@ -5,9 +5,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"gitlab.com/0ptr/conntracct/internal/pipeline"
-	"gitlab.com/0ptr/conntracct/internal/sinks"
-	"gitlab.com/0ptr/conntracct/internal/sinks/types"
+	"github.com/ti-mo/conntracct/internal/pipeline"
+	"github.com/ti-mo/conntracct/internal/sinks"
+	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
 var (

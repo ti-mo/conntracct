@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
-	"gitlab.com/0ptr/conntracct/pkg/bpf"
+	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 // Init initializes the pipeline. Only runs once, subsequent calls are no-ops.
