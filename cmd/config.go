@@ -27,7 +27,7 @@ var (
 		cfgAPIEndpoint: "localhost:8000",
 
 		// Sinks for accounting data.
-		cfgSinks: map[string]map[string]interface{}{
+		cfgSinks: map[string]interface{}{
 			"stdout": map[string]interface{}{
 				"type":        "stdout",
 				"sourcePorts": true,
