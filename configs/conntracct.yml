@@ -16,7 +16,7 @@ sinks:
 
   influxdb_http:
     type: influxdb-http
-    address: "localhost:8086"
+    address: "http://localhost:8086"
     batchSize: 200
     sourcePorts: false
 
