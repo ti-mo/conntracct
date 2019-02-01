@@ -85,8 +85,10 @@ func stringToSinkTypeHookFunc() mapstructure.DecodeHookFunc {
 		}
 
 		switch data {
-		case "stdio":
-			return StdIO, nil
+		case "stdout":
+			return StdOut, nil
+		case "stderr":
+			return StdErr, nil
 		case "influxdb-udp":
 			return InfluxUDP, nil
 		case "influxdb-http":

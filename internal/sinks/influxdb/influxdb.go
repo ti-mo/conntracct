@@ -20,9 +20,6 @@ const (
 // InfluxSink is an accounting sink implementing an InfluxDB client.
 type InfluxSink struct {
 
-	// Name of the sink.
-	name string
-
 	// Sink had Init() called on it successfully.
 	init bool
 
@@ -103,10 +100,9 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 	// Make a buffered channel for sendworkers.
 	s.sendChan = make(chan influx.BatchPoints, 64)
 
-	s.newBatch()     // initial empty batch
-	s.name = sc.Name // sink name
-	s.client = c     // client handle
-	s.config = sc    // config
+	s.newBatch()  // initial empty batch
+	s.client = c  // client handle
+	s.config = sc // config
 
 	go s.sendWorker()
 	go s.tickWorker()
@@ -178,7 +174,7 @@ func (s *InfluxSink) Push(e bpf.AcctEvent) {
 
 // Name gets the name of the InfluxDB accounting sink.
 func (s *InfluxSink) Name() string {
-	return s.name
+	return s.config.Name
 }
 
 // IsInit checks if the InfluxDB accounting sink was successfully initialized.

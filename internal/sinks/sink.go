@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/0ptr/conntracct/internal/sinks/influxdb"
+	"gitlab.com/0ptr/conntracct/internal/sinks/stdout"
 	"gitlab.com/0ptr/conntracct/internal/sinks/types"
 	"gitlab.com/0ptr/conntracct/pkg/bpf"
 )
@@ -47,6 +48,13 @@ func New(cfg types.SinkConfig) (Sink, error) {
 			return nil, err
 		}
 		sink = &idb
+	// stdout driver can write to either stdout or stderr.
+	case types.StdOut, types.StdErr:
+		std := stdout.New()
+		if err := std.Init(cfg); err != nil {
+			return nil, err
+		}
+		sink = &std
 	default:
 		return nil, fmt.Errorf("sink type '%s' not implemented", cfg.Type)
 	}

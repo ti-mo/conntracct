@@ -4,9 +4,9 @@ package types
 
 import "strconv"
 
-const _SinkType_name = "StdIOInfluxUDPInfluxHTTPElastic"
+const _SinkType_name = "StdOutStdErrInfluxUDPInfluxHTTPElastic"
 
-var _SinkType_index = [...]uint8{0, 5, 14, 24, 31}
+var _SinkType_index = [...]uint8{0, 6, 12, 21, 31, 38}
 
 func (i SinkType) String() string {
 	if i >= SinkType(len(_SinkType_index)-1) {

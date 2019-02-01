@@ -16,7 +16,7 @@ func (s *InfluxSink) sendWorker() {
 
 		// Write the batch
 		if err := s.client.Write(b); err != nil {
-			log.Errorf("InfluxDB sink '%s': Error writing batch: %s. Batch dropped.", s.name, err)
+			log.Errorf("InfluxDB sink '%s': Error writing batch: %s. Batch dropped.", s.config.Name, err)
 
 			// Increase dropped batch counter
 			s.stats.IncrBatchDropped()
