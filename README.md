@@ -1,6 +1,10 @@
 # conntracct
 
-Low-overhead, real-time network flow exporter based on conntrack, without packet captures.
+Conntracct is a tool for extracting network flow information from Linux hosts,
+firewalls, gateways, container or virtualization hosts, even mid- to high-end
+embedded devices. It does not capture or analyze packets in any way, but hooks
+into Conntrack's accounting (acct) subsystem using eBPF to receive events when
+a flow's counters are updated, with a very low overhead.
 
 ---
 
