@@ -43,7 +43,7 @@ func Select(kr string) (*bytes.Reader, kernel.Kernel, error) {
 func findProbe(k string, kernels map[string]kernel.Kernel) (kernel.Kernel, error) {
 
 	// Parse the running kernel version.
-	kv, err := semver.Make(k)
+	kv, err := semver.Parse(k)
 	if err != nil {
 		return kernel.Kernel{}, err
 	}

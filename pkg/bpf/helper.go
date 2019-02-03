@@ -3,6 +3,7 @@ package bpf
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ti-mo/conntracct/pkg/kallsyms"
@@ -20,7 +21,17 @@ func kernelRelease() (string, error) {
 	// Convert [65]byte to a string.
 	release := string(uname.Release[:bytes.IndexByte(uname.Release[:], 0)])
 
-	return release, nil
+	// Some distributions' (Fedora) kernel release strings are not correct
+	// semantic versions, for example '4.20.3-200.fc29.x86_64'.
+	// Extract the significant portion x.x(.x) without
+	rgx := regexp.MustCompile(`^(\d{1,3}\.\d{1,3}(?:\.\d{1,3})?).*$`)
+	out := rgx.FindStringSubmatch(release)
+	if len(out) == 0 {
+		return "", fmt.Errorf(errKernelRelease, release)
+	}
+
+	// Return the first capture group.
+	return out[1], nil
 }
 
 // checkProbeKsyms checks whether a list of k(ret)probes have their target functions

@@ -75,7 +75,7 @@ func NewAcctProbe(cfg AcctConfig) (*AcctProbe, error) {
 	if err := ap.module.Load(nil); err != nil {
 		// Error string from go-bpf can contain many NUL characters and need to be trimmed.
 		err = errors.New(strings.TrimRight(err.Error(), "\x00"))
-		return nil, errors.Wrap(err, "failed to load ELF binary")
+		return nil, errors.Wrap(err, fmt.Sprintf("failed to load ELF binary version %s", k.Version))
 	}
 
 	// Apply probe configuration.
