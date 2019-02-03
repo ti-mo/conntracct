@@ -12,21 +12,26 @@ import (
 )
 
 const (
-	app = "conntracct"
+	app       = "conntracct"
+	buildPath = "build/conntracct"
+)
+
+var (
+	build = sh.RunCmd("go", "build", "-o", buildPath)
 )
 
 // Build builds the application.
 func Build() error {
 
 	// Watch for files newer than the app in these directories.
-	mod, err := target.Dir(app, "bpf", "pkg", "cmd", "internal")
+	mod, err := target.Dir(buildPath, "bpf", "pkg", "cmd", "internal")
 	if err != nil {
 		return err
 	}
 
 	if mod {
 
-		realPath := realPath(app)
+		realPath := realPath(buildPath)
 
 		// Unlink the existing binary so it can be replaced without stopping the daemon first.
 		if err := sh.Rm(realPath); err != nil {
@@ -34,7 +39,7 @@ func Build() error {
 		}
 
 		// Build the application
-		if err := sh.Run("go", "build"); err != nil {
+		if err := build(); err != nil {
 			return err
 		}
 
@@ -47,11 +52,11 @@ func Build() error {
 			return err
 		}
 
-		fmt.Printf("Successfully built %s!\n", app)
+		fmt.Printf("Successfully built %s!\n", buildPath)
 		return nil
 	}
 
-	fmt.Println(app, "already up to date.")
+	fmt.Println(buildPath, "already up to date.")
 	return nil
 }
 
