@@ -15,8 +15,8 @@ import (
 const perfUpdateMap = "perf_acct_update"
 const perfDestroyMap = "perf_acct_end"
 
-// AcctProbe is an instance of a BPF probe running in the kernel.
-type AcctProbe struct {
+// Probe is an instance of a BPF probe running in the kernel.
+type Probe struct {
 
 	// gobpf/elf objects.
 	module      *elf.Module
@@ -28,7 +28,7 @@ type AcctProbe struct {
 
 	// List of event consumers of the probe.
 	consumerMu sync.RWMutex
-	consumers  []*AcctConsumer
+	consumers  []*Consumer
 
 	// Amount of lost BPF perf events.
 	lostChan chan uint64
@@ -44,9 +44,9 @@ type AcctProbe struct {
 	started bool
 }
 
-// NewAcctProbe instantiates an AcctProbe using the given AcctConfig.
+// NewProbe instantiates an Probe using the given Config.
 // Loads the BPF program into the kernel but does not attach its kprobes yet.
-func NewAcctProbe(cfg AcctConfig) (*AcctProbe, error) {
+func NewProbe(cfg Config) (*Probe, error) {
 
 	kr, err := kernelRelease()
 	if err != nil {
@@ -59,8 +59,8 @@ func NewAcctProbe(cfg AcctConfig) (*AcctProbe, error) {
 		return nil, errors.Wrap(err, "selecting BPF probe")
 	}
 
-	// Instantiate AcctProbe with selected target kernel struct.
-	ap := AcctProbe{
+	// Instantiate Probe with selected target kernel struct.
+	ap := Probe{
 		kernel: k,
 	}
 
@@ -87,7 +87,7 @@ func NewAcctProbe(cfg AcctConfig) (*AcctProbe, error) {
 }
 
 // Start attaches the BPF program's kprobes and starts polling the perf ring buffer.
-func (ap *AcctProbe) Start() error {
+func (ap *Probe) Start() error {
 
 	ap.startMu.Lock()
 	defer ap.startMu.Unlock()
@@ -137,8 +137,8 @@ func (ap *AcctProbe) Start() error {
 }
 
 // Stop stops the BPF program and releases all its related resources.
-// Closes all AcctProbe's channels. Can only be called after Start().
-func (ap *AcctProbe) Stop() error {
+// Closes all Probe's channels. Can only be called after Start().
+func (ap *Probe) Stop() error {
 
 	ap.startMu.Lock()
 	defer ap.startMu.Unlock()
@@ -161,23 +161,23 @@ func (ap *AcctProbe) Stop() error {
 }
 
 // Kernel returns the target kernel structure of the selected probe.
-func (ap *AcctProbe) Kernel() kernel.Kernel {
+func (ap *Probe) Kernel() kernel.Kernel {
 	return ap.kernel
 }
 
-// ErrChan returns an initialized AcctProbe's unbuffered error channel.
+// ErrChan returns an initialized Probe's unbuffered error channel.
 // The error channel is unbuffered because it doesn't make sense to have
 // stale error data. If there is no ready consumer on the channel, errors
 // are dropped.
-// Returns nil if the AcctProbe has not been Start()ed yet.
-func (ap *AcctProbe) ErrChan() chan error {
+// Returns nil if the Probe has not been Start()ed yet.
+func (ap *Probe) ErrChan() chan error {
 	return ap.errChan
 }
 
-// sendError safely sends a message on the AcctProbe's unbuffered errChan.
+// sendError safely sends a message on the Probe's unbuffered errChan.
 // If there is no ready channel receiver, sendError is a no-op. A return value
 // of true means the error was successfully sent on the channel.
-func (ap *AcctProbe) sendError(err error) bool {
+func (ap *Probe) sendError(err error) bool {
 	select {
 	case ap.errChan <- err:
 		return true
@@ -186,10 +186,10 @@ func (ap *AcctProbe) sendError(err error) bool {
 	}
 }
 
-// perfWorker reads binary events from the AcctProbe's event channel,
-// unmarshals the events into AcctEvents and sends them on all registered
+// perfWorker reads binary events from the Probe's event channel,
+// unmarshals the events into Events and sends them on all registered
 // consumers' event channels. Exits if perfUpdateChan or perfDestroyChan are closed.
-func perfWorker(ap *AcctProbe) {
+func perfWorker(ap *Probe) {
 
 	var eb []byte
 	var ok bool
@@ -208,9 +208,9 @@ func perfWorker(ap *AcctProbe) {
 			return
 		}
 
-		var ae AcctEvent
+		var ae Event
 		if err := ae.UnmarshalBinary(eb); err != nil {
-			ap.sendError(errors.Wrap(err, "error unmarshaling AcctEvent byte array"))
+			ap.sendError(errors.Wrap(err, "error unmarshaling Event byte array"))
 		}
 
 		// Fanout to all registered consumers.
@@ -218,9 +218,9 @@ func perfWorker(ap *AcctProbe) {
 	}
 }
 
-// lostWorker increments the AcctProbe's lost field for every message
+// lostWorker increments the Probe's lost field for every message
 // received on its lostChan. Exits if lostChan is closed.
-func lostWorker(ap *AcctProbe) {
+func lostWorker(ap *Probe) {
 
 	for {
 		_, ok := <-ap.lostChan
@@ -233,10 +233,10 @@ func lostWorker(ap *AcctProbe) {
 	}
 }
 
-// fanoutEvent sends the given AcctEvent to all registered consumers.
+// fanoutEvent sends the given Event to all registered consumers.
 // The update flag specifies whether the event is an update (true) or destroy
 // (false) event.
-func (ap *AcctProbe) fanoutEvent(ae AcctEvent, update bool) {
+func (ap *Probe) fanoutEvent(ae Event, update bool) {
 
 	// Take a read lock on the consumers so we don't send to closed or already
 	// unregistered consumer channels.

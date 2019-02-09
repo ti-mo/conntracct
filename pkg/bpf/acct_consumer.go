@@ -11,24 +11,24 @@ const (
 	ConsumerAll     ConsumerMode = (ConsumerUpdate | ConsumerDestroy)
 )
 
-// An AcctConsumer is a consumer of accounting events.
-type AcctConsumer struct {
+// An Consumer is a consumer of accounting events.
+type Consumer struct {
 	name string
 
-	events chan AcctEvent
+	events chan Event
 	lost   uint64
 
 	mode ConsumerMode // bitfield for which events to subscribe to
 }
 
-// NewAcctConsumer returns a new AcctConsumer.
-func NewAcctConsumer(name string, events chan AcctEvent, mode ConsumerMode) *AcctConsumer {
+// NewConsumer returns a new Consumer.
+func NewConsumer(name string, events chan Event, mode ConsumerMode) *Consumer {
 
 	if mode == 0 {
 		mode = ConsumerAll
 	}
 
-	ac := AcctConsumer{
+	ac := Consumer{
 		name:   name,
 		events: events,
 		mode:   mode,
@@ -38,22 +38,22 @@ func NewAcctConsumer(name string, events chan AcctEvent, mode ConsumerMode) *Acc
 }
 
 // WantUpdate returns whether or not this consumer wants to receive update events.
-func (ac *AcctConsumer) WantUpdate() bool {
+func (ac *Consumer) WantUpdate() bool {
 	return (ac.mode & ConsumerUpdate) > 0
 }
 
 // WantDestroy returns whether or not this consumer wants to receive destroy events.
-func (ac *AcctConsumer) WantDestroy() bool {
+func (ac *Consumer) WantDestroy() bool {
 	return (ac.mode & ConsumerDestroy) > 0
 }
 
-// Close closes the AcctConsumer's event channel.
-func (ac *AcctConsumer) Close() {
+// Close closes the Consumer's event channel.
+func (ac *Consumer) Close() {
 	close(ac.events)
 }
 
-// RegisterConsumer registers an AcctConsumer in an AcctProbe.
-func (ap *AcctProbe) RegisterConsumer(ac *AcctConsumer) error {
+// RegisterConsumer registers an Consumer in an Probe.
+func (ap *Probe) RegisterConsumer(ac *Consumer) error {
 
 	if ac == nil {
 		return errConsumerNil
@@ -74,8 +74,8 @@ func (ap *AcctProbe) RegisterConsumer(ac *AcctConsumer) error {
 	return nil
 }
 
-// RemoveConsumer removes an AcctConsumer from the AcctProbe's consumer list.
-func (ap *AcctProbe) RemoveConsumer(ac *AcctConsumer) error {
+// RemoveConsumer removes an Consumer from the Probe's consumer list.
+func (ap *Probe) RemoveConsumer(ac *Consumer) error {
 
 	if ac == nil {
 		return errConsumerNil
@@ -103,9 +103,9 @@ func (ap *AcctProbe) RemoveConsumer(ac *AcctConsumer) error {
 	return errNoConsumer
 }
 
-// GetConsumer looks up and returns an AcctConsumer registered in an AcctProbe
+// GetConsumer looks up and returns an Consumer registered in an Probe
 // based on its name. Returns nil if consumer does not exist in probe.
-func (ap *AcctProbe) GetConsumer(name string) *AcctConsumer {
+func (ap *Probe) GetConsumer(name string) *Consumer {
 
 	ap.consumerMu.RLock()
 	defer ap.consumerMu.RUnlock()

@@ -27,7 +27,7 @@ func (s *SinkStats) IncrEventsPushed() {
 	atomic.AddUint64(&s.data.EventsPushed, 1)
 }
 
-// IncrEventsPushed atomically increases the sink's event counter by one.
+// IncrEventsDropped atomically increases the sink's dropped event counter by one.
 func (s *SinkStats) IncrEventsDropped() {
 	atomic.AddUint64(&s.data.EventsDropped, 1)
 }

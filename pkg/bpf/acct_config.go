@@ -16,13 +16,13 @@ const (
 	bpfAny = 0 // BPF_ANY
 )
 
-// AcctConfig is a configuration object for the acct BPF probe.
-type AcctConfig struct {
+// Config is a configuration object for the acct BPF probe.
+type Config struct {
 	CooldownMillis uint32
 }
 
 // configureProbe sets configuration values in the probe's config map.
-func configureProbe(mod *elf.Module, cfg AcctConfig) error {
+func configureProbe(mod *elf.Module, cfg Config) error {
 
 	cm := mod.Map("config")
 

@@ -11,11 +11,11 @@ const (
 var (
 	errNotInRange = errors.New("range check did not match any version")
 
-	errProbeStarted    = errors.New("AcctProbe already running")
-	errProbeNotStarted = errors.New("AcctProbe is not running")
+	errProbeStarted    = errors.New("Probe already running")
+	errProbeNotStarted = errors.New("Probe is not running")
 
-	errDupConsumer = errors.New("an AcctConsumer with the same name is already registered")
-	errNoConsumer  = errors.New("could not find the AcctConsumer to delete")
+	errDupConsumer = errors.New("an Consumer with the same name is already registered")
+	errNoConsumer  = errors.New("could not find the Consumer to delete")
 
-	errConsumerNil = errors.New("given AcctConsumer is nil")
+	errConsumerNil = errors.New("given Consumer is nil")
 )

@@ -22,7 +22,7 @@ type StdOut struct {
 
 	// Internal buffered event channel. BatchLength configuration parameter
 	// is used as the buffer size of the channel.
-	events chan bpf.AcctEvent
+	events chan bpf.Event
 
 	// Stdout/err writer.
 	writer *bufio.Writer
@@ -55,7 +55,7 @@ func (s *StdOut) Init(sc types.SinkConfig) error {
 		return errInvalidSinkType
 	}
 
-	s.events = make(chan bpf.AcctEvent, sc.BatchSize)
+	s.events = make(chan bpf.Event, sc.BatchSize)
 	s.config = sc
 
 	go s.outWorker()
@@ -67,7 +67,7 @@ func (s *StdOut) Init(sc types.SinkConfig) error {
 }
 
 // Push an accounting event into the buffer of the StdOut accounting sink.
-func (s *StdOut) Push(e bpf.AcctEvent) {
+func (s *StdOut) Push(e bpf.Event) {
 	// Non-blocking send on event channel.
 	select {
 	case s.events <- e:

@@ -8,12 +8,13 @@ import (
 	"os/exec"
 	"path"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 	"github.com/magefile/mage/target"
 
-	"github.com/magefile/mage/mg"
 	"github.com/ti-mo/conntracct/pkg/kernel"
-	"golang.org/x/sync/errgroup"
 )
 
 const (

@@ -7,12 +7,11 @@ import (
 	"unsafe"
 )
 
-// AcctEventLength is the length of the struct sent by BPF.
-const AcctEventLength = 104
+// EventLength is the length of the struct sent by BPF.
+const EventLength = 104
 
-// AcctEvent is a kernelspace probe delivered
-// by the 'acct' BPF program.
-type AcctEvent struct {
+// Event is an accounting event delivered to userspace from the Probe.
+type Event struct {
 	Start        uint64 // epoch timestamp of flow start
 	Timestamp    uint64 // ktime timestamp of event
 	ConnectionID uint32
@@ -29,11 +28,11 @@ type AcctEvent struct {
 	Proto        uint8
 }
 
-// UnmarshalBinary unmarshals a binary AcctEvent representation
+// UnmarshalBinary unmarshals a binary Event representation
 // into a struct, using the machine's native endianness.
-func (e *AcctEvent) UnmarshalBinary(b []byte) error {
+func (e *Event) UnmarshalBinary(b []byte) error {
 
-	if len(b) != AcctEventLength {
+	if len(b) != EventLength {
 		return fmt.Errorf("input byte array incorrect length %d", len(b))
 	}
 
@@ -75,8 +74,8 @@ func (e *AcctEvent) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-// String returns a readable string representation of the AcctEvent.
-func (e *AcctEvent) String() string {
+// String returns a readable string representation of the Event.
+func (e *Event) String() string {
 	return fmt.Sprintf("%+v", *e)
 }
 

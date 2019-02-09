@@ -28,7 +28,7 @@ type Sink interface {
 
 	// Enqueue an accounting event to the sink driver.
 	// Implementation MUST be thread-safe.
-	Push(bpf.AcctEvent)
+	Push(bpf.Event)
 
 	// Get a snapshot copy of the sink's performance statistics.
 	Stats() types.SinkStatsData

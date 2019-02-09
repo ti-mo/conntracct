@@ -115,7 +115,7 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 
 // Push an accounting event into the buffer of the InfluxDB accounting sink.
 // Adds data points to the InfluxDB client buffer in a thread-safe manner.
-func (s *InfluxSink) Push(e bpf.AcctEvent) {
+func (s *InfluxSink) Push(e bpf.Event) {
 
 	// Create a point and add to batch.
 	tags := map[string]string{

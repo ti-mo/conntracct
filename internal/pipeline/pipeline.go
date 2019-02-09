@@ -17,9 +17,9 @@ type Pipeline struct {
 	start sync.Once
 
 	// Protected by init.
-	acctProbe       *bpf.AcctProbe
-	acctUpdateChan  chan bpf.AcctEvent
-	acctDestroyChan chan bpf.AcctEvent
+	acctProbe       *bpf.Probe
+	acctUpdateChan  chan bpf.Event
+	acctDestroyChan chan bpf.Event
 
 	acctSinkMu sync.RWMutex
 	acctSinks  []sinks.Sink
@@ -29,22 +29,22 @@ type Pipeline struct {
 // data processing pipeline.
 type Stats struct {
 
-	// total amount of `acct_event` structs received from kernel
-	AcctEventsTotal uint64 `json:"acct_events_total"`
+	// total amount of event structs received from kernel
+	EventsTotal uint64 `json:"events_total"`
 	// total amount of bytes read from the BPF perf buffer(s)
-	AcctBytesTotal uint64 `json:"acct_bytes_total"`
+	AcctBytesTotal uint64 `json:"bytes_total"`
 
 	// update events / bytes
-	AcctEventsUpdate uint64 `json:"acct_events_update"`
-	AcctBytesUpdate  uint64 `json:"acct_bytes_update"`
+	EventsUpdate    uint64 `json:"events_update"`
+	AcctBytesUpdate uint64 `json:"bytes_update"`
 
 	// destroy events / bytes
-	AcctEventsDestroy uint64 `json:"acct_events_destroy"`
-	AcctBytesDestroy  uint64 `json:"acct_bytes_destroy"`
+	EventsDestroy    uint64 `json:"events_destroy"`
+	AcctBytesDestroy uint64 `json:"bytes_destroy"`
 
-	// length of the AcctEvent queues
-	AcctUpdateQueueLen  uint64 `json:"acct_update_queue_length"`
-	AcctDestroyQueueLen uint64 `json:"acct_destroy_queue_length"`
+	// length of the Event queues
+	AcctUpdateQueueLen  uint64 `json:"update_queue_length"`
+	AcctDestroyQueueLen uint64 `json:"destroy_queue_length"`
 }
 
 // New creates a new Pipeline structure.
