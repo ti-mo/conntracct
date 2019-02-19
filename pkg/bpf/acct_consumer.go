@@ -11,7 +11,7 @@ const (
 	ConsumerAll     ConsumerMode = (ConsumerUpdate | ConsumerDestroy)
 )
 
-// An Consumer is a consumer of accounting events.
+// A Consumer of accounting events.
 type Consumer struct {
 	name string
 
