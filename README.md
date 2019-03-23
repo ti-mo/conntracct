@@ -46,6 +46,7 @@ capabilities:
 When using the BPF probe for real-time accounting events:
 
 - `cap_sys_admin` for calling bpf()
+- `cap_sys_resource` for calling `setrlimit()` for ring buffer memory
 - `cap_ipc_lock` for locking memory for the ring buffer
 - `cap_dac_override` for opening /sys/kernel/debug/tracing/*
 

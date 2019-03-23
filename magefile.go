@@ -48,7 +48,7 @@ func Build() error {
 		// cap_ipc_lock for locking memory for the ring buffer.
 		// cap_dac_override for opening /sys/kernel/debug/tracing/*
 		// cap_net_admin for managing sysctl net.netfilter.nf_conntrack_acct
-		if err := sh.Run("sudo", "setcap", "cap_sys_admin,cap_ipc_lock,cap_net_admin,cap_dac_override+eip", realPath); err != nil {
+		if err := sh.Run("sudo", "setcap", "cap_sys_admin,cap_ipc_lock,cap_net_admin,cap_dac_override,cap_sys_resource+eip", realPath); err != nil {
 			return err
 		}
 
