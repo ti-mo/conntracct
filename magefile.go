@@ -85,9 +85,9 @@ func Generate() error {
 	return nil
 }
 
-// Lint runs gometalinter on all packages. Excludes `gosec`
+// Lint runs golangci-lint with the project's configuration.
 func Lint() error {
-	return sh.RunV("gometalinter", "--vendor", "-D", "gosec", "--exclude", "magefile.*", "./...")
+	return sh.RunV("golangci-lint", "run")
 }
 
 // realPath resolves (nested) symlinks. If the target of a nested symlink does
