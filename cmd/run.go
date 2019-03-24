@@ -5,12 +5,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/spf13/viper"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/ti-mo/conntracct/internal/apiserver"
 	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/pipeline"
