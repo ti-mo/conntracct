@@ -4,6 +4,17 @@ package types
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[StdOut-0]
+	_ = x[StdErr-1]
+	_ = x[InfluxUDP-2]
+	_ = x[InfluxHTTP-3]
+	_ = x[Elastic-4]
+}
+
 const _SinkType_name = "StdOutStdErrInfluxUDPInfluxHTTPElastic"
 
 var _SinkType_index = [...]uint8{0, 6, 12, 21, 31, 38}
