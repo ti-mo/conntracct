@@ -3,10 +3,11 @@ package sinks
 import (
 	"fmt"
 
+	"github.com/ti-mo/conntracct/pkg/bpf"
+
 	"github.com/ti-mo/conntracct/internal/sinks/influxdb"
 	"github.com/ti-mo/conntracct/internal/sinks/stdout"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
-	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 // An Sink represents a timeseries database or other store
@@ -31,7 +32,7 @@ type Sink interface {
 	Push(bpf.Event)
 
 	// Get a snapshot copy of the sink's performance statistics.
-	Stats() types.SinkStatsData
+	Stats() types.SinkStats
 }
 
 // New returns a new, initialized Sink based on the type of

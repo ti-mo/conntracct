@@ -2,13 +2,11 @@ package types
 
 import "sync/atomic"
 
-// SinkStats is an embeddable struct holding an SinkStatsData.
+// SinkStats holds performance metrics about an accounting sink.
+// All values are updated using atomic operations, so always use sync/atomic's
+// Load*() methods to read values from the structure. The Get() convenience
+// method returns a new instance of itself using atomic loads.
 type SinkStats struct {
-	data SinkStatsData
-}
-
-// SinkStatsData holds performance metrics about the the accounting sink.
-type SinkStatsData struct {
 	// Amount of events Push()ed into the sink.
 	EventsPushed uint64 `json:"events_pushed"`
 	// Amount of events failed to be Push()ed into the sink.
@@ -24,36 +22,38 @@ type SinkStatsData struct {
 
 // IncrEventsPushed atomically increases the sink's event counter by one.
 func (s *SinkStats) IncrEventsPushed() {
-	atomic.AddUint64(&s.data.EventsPushed, 1)
+	atomic.AddUint64(&s.EventsPushed, 1)
 }
 
 // IncrEventsDropped atomically increases the sink's dropped event counter by one.
 func (s *SinkStats) IncrEventsDropped() {
-	atomic.AddUint64(&s.data.EventsDropped, 1)
+	atomic.AddUint64(&s.EventsDropped, 1)
 }
 
 // SetBatchLength sets the length of the current batch.
 func (s *SinkStats) SetBatchLength(l int) {
-	atomic.StoreUint64(&s.data.BatchLength, uint64(l))
+	atomic.StoreUint64(&s.BatchLength, uint64(l))
 }
 
 // IncrBatchDropped atomically increases the sink's dropped batch counter by one.
 func (s *SinkStats) IncrBatchDropped() {
-	atomic.AddUint64(&s.data.BatchesDropped, 1)
+	atomic.AddUint64(&s.BatchesDropped, 1)
 }
 
 // IncrBatchSent atomically increases the sink's sent batch counter by one.
 func (s *SinkStats) IncrBatchSent() {
-	atomic.AddUint64(&s.data.BatchesSent, 1)
+	atomic.AddUint64(&s.BatchesSent, 1)
 }
 
-// Get returns a non-atomic snapshot of the stats data.
-func (s *SinkStats) Get() SinkStatsData {
-	return SinkStatsData{
-		EventsPushed:   atomic.LoadUint64(&s.data.EventsPushed),
-		EventsDropped:  atomic.LoadUint64(&s.data.EventsDropped),
-		BatchLength:    atomic.LoadUint64(&s.data.BatchLength),
-		BatchesSent:    atomic.LoadUint64(&s.data.BatchesSent),
-		BatchesDropped: atomic.LoadUint64(&s.data.BatchesDropped),
+// Get returns a copy of the SinkStats structure created using atomic loads.
+// The values can be inconsistent with each other, as they are written and
+// read concurrently without locks.
+func (s *SinkStats) Get() SinkStats {
+	return SinkStats{
+		EventsPushed:   atomic.LoadUint64(&s.EventsPushed),
+		EventsDropped:  atomic.LoadUint64(&s.EventsDropped),
+		BatchLength:    atomic.LoadUint64(&s.BatchLength),
+		BatchesSent:    atomic.LoadUint64(&s.BatchesSent),
+		BatchesDropped: atomic.LoadUint64(&s.BatchesDropped),
 	}
 }

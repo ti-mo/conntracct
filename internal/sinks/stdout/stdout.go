@@ -99,6 +99,6 @@ func (s *StdOut) WantDestroy() bool {
 }
 
 // Stats returns the StdOut's statistics structure.
-func (s *StdOut) Stats() types.SinkStatsData {
+func (s *StdOut) Stats() types.SinkStats {
 	return s.stats.Get()
 }

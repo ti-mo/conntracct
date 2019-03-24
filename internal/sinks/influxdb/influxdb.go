@@ -193,7 +193,7 @@ func (s *InfluxSink) WantDestroy() bool {
 }
 
 // Stats returns the InfluxDB accounting sink's statistics structure.
-func (s *InfluxSink) Stats() types.SinkStatsData {
+func (s *InfluxSink) Stats() types.SinkStats {
 	return s.stats.Get()
 }
 
