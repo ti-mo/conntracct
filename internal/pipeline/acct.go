@@ -1,8 +1,6 @@
 package pipeline
 
 import (
-	"sync/atomic"
-
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
@@ -101,11 +99,8 @@ func (p *Pipeline) acctUpdateWorker() {
 		}
 
 		// Record pipeline statistics.
-		atomic.AddUint64(&p.Stats.EventsTotal, 1)
-		atomic.AddUint64(&p.Stats.AcctBytesTotal, bpf.EventLength)
-		atomic.AddUint64(&p.Stats.EventsUpdate, 1)
-		atomic.AddUint64(&p.Stats.AcctBytesUpdate, bpf.EventLength)
-		atomic.StoreUint64(&p.Stats.AcctUpdateQueueLen, uint64(len(p.acctUpdateChan)))
+		p.stats.IncrEventsUpdate()
+		p.stats.SetUpdateQueueLen(len(p.acctUpdateChan))
 
 		// Fan out to all registered accounting sinks.
 		p.acctSinkMu.RLock()
@@ -128,11 +123,8 @@ func (p *Pipeline) acctDestroyWorker() {
 		}
 
 		// Record pipeline statistics.
-		atomic.AddUint64(&p.Stats.EventsTotal, 1)
-		atomic.AddUint64(&p.Stats.AcctBytesTotal, bpf.EventLength)
-		atomic.AddUint64(&p.Stats.EventsDestroy, 1)
-		atomic.AddUint64(&p.Stats.AcctBytesDestroy, bpf.EventLength)
-		atomic.StoreUint64(&p.Stats.AcctDestroyQueueLen, uint64(len(p.acctDestroyChan)))
+		p.stats.IncrEventsDestroy()
+		p.stats.SetDestroyQueueLen(len(p.acctDestroyChan))
 
 		// Fan out to all registered accounting sinks.
 		p.acctSinkMu.RLock()

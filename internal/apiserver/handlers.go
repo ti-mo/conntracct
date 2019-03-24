@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"encoding/json"
 	"net/http"
 )
 
@@ -9,9 +10,11 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 
-	write(w, "Pipeline: %v\n", pipe.Stats)
+	jps, _ := json.Marshal(pipe.Stats())
+	write(w, "Pipeline: %s\n", jps)
 
 	for _, s := range pipe.GetSinks() {
-		write(w, "Sink '%s': %v\n", s.Name(), s.Stats())
+		jss, _ := json.Marshal(s.Stats())
+		write(w, "Sink '%s': %s\n", s.Name(), jss)
 	}
 }
