@@ -20,7 +20,7 @@ func nanotime() int64
 // events when only the monotonic clock (ktime) is known.
 //
 // Performs multiple rounds of direct calls to runtime.nanotime()
-// and time.Now() as close to each other as possible, and substracts
+// and time.Now() as close to each other as possible, and subtracts
 // the nanotime from the time.Now() value. Each round, the result is
 // 'voted' on, to increase the confidence in the origin timestamp.
 func Estimate() time.Time {

@@ -7,7 +7,7 @@ package kernel
 // this map needs to be updated with the version it's introduced in.
 var Builds = map[string]Kernel{
 	// 4.9 used by Debian Stretch.
-	"4.9.142": Kernel{
+	"4.9.142": {
 		Version: "4.9.142",
 		URL:     "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.9.142.tar.xz",
 		Params:  params["MarkNFTNat"],
@@ -30,7 +30,7 @@ var Builds = map[string]Kernel{
 }
 
 var params = map[string]Params{
-	"MarkNFTNat": Params{
+	"MarkNFTNat": {
 		"CONFIG_NETFILTER":          "y",
 		"CONFIG_NETFILTER_ADVANCED": "y",
 
@@ -50,7 +50,7 @@ var params = map[string]Params{
 var kprobes = map[string]Probes{
 	// These probes are enabled in the sequence listed here.
 	// List functions that insert records into a map last to prevent stale records in BPF maps.
-	"acct_v1": Probes{
+	"acct_v1": {
 		"kprobe/nf_conntrack_free",
 		"kretprobe/__nf_ct_refresh_acct",
 		"kprobe/__nf_ct_refresh_acct",

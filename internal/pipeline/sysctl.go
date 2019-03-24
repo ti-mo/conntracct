@@ -50,6 +50,7 @@ func warnSysctlWait() {
 	}
 
 	if warned {
-		log.Warn("Consider lowering the Conntrack connection timeouts above. Flows only generate destroy events when their timeout expires.")
+		log.Warn("Consider lowering the Conntrack connection timeouts above. " +
+			"Flows only generate destroy events when their timeout expires.")
 	}
 }

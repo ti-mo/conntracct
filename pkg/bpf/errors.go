@@ -11,8 +11,8 @@ const (
 var (
 	errNotInRange = errors.New("range check did not match any version")
 
-	errProbeStarted    = errors.New("Probe already running")
-	errProbeNotStarted = errors.New("Probe is not running")
+	errProbeStarted    = errors.New("probe already running")
+	errProbeNotStarted = errors.New("probe is not running")
 
 	errDupConsumer = errors.New("an Consumer with the same name is already registered")
 	errNoConsumer  = errors.New("could not find the Consumer to delete")

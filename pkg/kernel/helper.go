@@ -21,10 +21,8 @@ func curl(url, filePath string) error {
 		if err := sh.Run("curl", "-L", url, "-o", filePath); err != nil {
 			return err
 		}
-	} else {
-		if mg.Verbose() {
-			fmt.Println(filePath, "exists, skipping download.")
-		}
+	} else if mg.Verbose() {
+		fmt.Println(filePath, "exists, skipping download.")
 	}
 
 	return nil
@@ -45,10 +43,8 @@ func unarchive(archive, dest, check string) error {
 		if mg.Verbose() {
 			fmt.Printf("Extraction of %s complete!\n", archive)
 		}
-	} else {
-		if mg.Verbose() {
-			fmt.Println(check, "exists, skipping unarchive.")
-		}
+	} else if mg.Verbose() {
+		fmt.Println(check, "exists, skipping unarchive.")
 	}
 
 	return nil

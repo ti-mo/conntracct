@@ -40,7 +40,8 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default conntracct.yml in $HOME/.config/ or /etc/conntracct/)")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "",
+		"config file (default conntracct.yml in $HOME/.config/ or /etc/conntracct/)")
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug logging")
 }
 
