@@ -73,6 +73,11 @@ func (p *Pipeline) Stop() error {
 	return p.acctProbe.Stop()
 }
 
+// ProbeStats returns a snapshot copy of the pipeline's probe's statistics.
+func (p *Pipeline) ProbeStats() bpf.Stats {
+	return p.acctProbe.Stats()
+}
+
 // Stats returns a snapshot copy of the pipeline's statistics.
 func (p *Pipeline) Stats() Stats {
 	return p.stats.Get()
