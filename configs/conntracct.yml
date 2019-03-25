@@ -17,8 +17,12 @@ sinks:
   influxdb_http:
     type: influxdb-http
     address: "http://localhost:8086"
+    database: conntracct_http
     batchSize: 200
     sourcePorts: false
+
+  dummy:
+    type: dummy
 
 # Automatically configure necessary sysctls for Conntrack.
 sysctl_manage: true
