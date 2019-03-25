@@ -6,3 +6,9 @@ datasources:
     access: proxy
     database: conntracct_udp
     url: http://influxdb:8086
+
+  - name: influx_http
+    type: influxdb
+    access: proxy
+    database: conntracct_http
+    url: http://influxdb:8086

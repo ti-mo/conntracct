@@ -14,7 +14,7 @@ services:
       INFLUXDB_UDP_DATABASE: conntracct_udp
       INFLUXDB_UDP_BATCH_SIZE: 8388608  # (8*1024*1024)
   grafana:
-    image: grafana/grafana:5.3.4
+    image: grafana/grafana:6.0.2
     networks:
       - conntracct
     ports:
