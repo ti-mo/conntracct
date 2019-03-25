@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ti-mo/conntracct/pkg/kallsyms"
 	"golang.org/x/sys/unix"
+
+	"github.com/ti-mo/conntracct/pkg/kallsyms"
 )
 
 // kernelRelease returns the release name of the running kernel.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/rakyll/statik/fs"
+
 	"github.com/ti-mo/conntracct/pkg/kernel"
 )
 

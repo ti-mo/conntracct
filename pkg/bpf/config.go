@@ -3,8 +3,9 @@ package bpf
 import (
 	"unsafe"
 
-	"github.com/iovisor/gobpf/elf"
 	"github.com/pkg/errors"
+
+	"github.com/iovisor/gobpf/elf"
 )
 
 var (

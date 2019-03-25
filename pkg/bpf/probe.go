@@ -6,10 +6,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ti-mo/conntracct/pkg/kernel"
-
 	"github.com/iovisor/gobpf/elf"
 	"github.com/pkg/errors"
+
+	"github.com/ti-mo/conntracct/pkg/kernel"
 )
 
 const perfUpdateMap = "perf_acct_update"
