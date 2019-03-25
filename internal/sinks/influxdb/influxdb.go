@@ -78,6 +78,12 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 			return err
 		}
 	case types.InfluxHTTP:
+
+		// HTTP client needs a database name to write to.
+		if sc.Database == "" {
+			return errEmptySinkDatabase
+		}
+
 		// Construct InfluxDB HTTP configuration and client.
 		conf := influx.HTTPConfig{
 			Addr:     sc.Address,
@@ -90,6 +96,19 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 		if err != nil {
 			return err
 		}
+
+		// Check if the server is up, waiting for a leader for up to 10s.
+		if _, _, err := c.Ping(time.Second * 10); err != nil {
+			return err
+		}
+
+		// Ensure the database with the given name is created.
+		q := influx.NewQuery("CREATE DATABASE "+sc.Database, "", "")
+		if r, err := c.Query(q); err != nil {
+			return err
+		} else if r.Error() != nil {
+			return r.Error()
+		}
 	default:
 		return errInvalidSinkType
 	}
@@ -100,9 +119,9 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 	// Make a buffered channel for sendworkers.
 	s.sendChan = make(chan influx.BatchPoints, 64)
 
-	s.newBatch()  // initial empty batch
 	s.client = c  // client handle
 	s.config = sc // config
+	s.newBatch()  // initial empty batch
 
 	go s.sendWorker()
 	go s.tickWorker()
@@ -202,6 +221,7 @@ func (s *InfluxSink) newBatch() {
 
 	b, err := influx.NewBatchPoints(influx.BatchPointsConfig{
 		Precision: "ns", // nanosecond precision timestamps
+		Database:  s.config.Database,
 	})
 
 	if err != nil {
@@ -209,4 +229,5 @@ func (s *InfluxSink) newBatch() {
 	}
 
 	s.batch = b
+	s.stats.SetBatchLength(0)
 }
