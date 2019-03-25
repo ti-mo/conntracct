@@ -30,9 +30,8 @@ type Probe struct {
 	consumerMu sync.RWMutex
 	consumers  []*Consumer
 
-	// Amount of lost BPF perf events.
+	// Channel for receiving IDs of lost perf events.
 	lostChan chan uint64
-	lost     uint64
 
 	// Communication channels with the perfWorker.
 	perfUpdateChan  chan []byte
@@ -42,6 +41,8 @@ type Probe struct {
 	// Started status of the probe.
 	startMu sync.Mutex
 	started bool
+
+	stats *Stats
 }
 
 // NewProbe instantiates an Probe using the given Config.
@@ -62,6 +63,7 @@ func NewProbe(cfg Config) (*Probe, error) {
 	// Instantiate Probe with selected target kernel struct.
 	ap := Probe{
 		kernel: k,
+		stats:  &Stats{},
 	}
 
 	// Scan kallsyms before attempting BPF load to avoid arcane error output from eBPF attach.
@@ -122,10 +124,10 @@ func (ap *Probe) Start() error {
 	ap.perfDestroy = dm
 
 	// Start the event message decoder and fanout worker.
-	go perfWorker(ap)
+	go ap.perfWorker()
 
 	// Start worker counting the amount of lost messages.
-	go lostWorker(ap)
+	go ap.lostWorker()
 
 	// Start polling the BPF perf ring buffer, into update and destroy chans.
 	um.PollStart()
@@ -174,6 +176,11 @@ func (ap *Probe) ErrChan() chan error {
 	return ap.errChan
 }
 
+// Stats returns a snapshot copy of the Probe's statistics.
+func (ap *Probe) Stats() Stats {
+	return ap.stats.Get()
+}
+
 // sendError safely sends a message on the Probe's unbuffered errChan.
 // If there is no ready channel receiver, sendError is a no-op. A return value
 // of true means the error was successfully sent on the channel.
@@ -189,7 +196,7 @@ func (ap *Probe) sendError(err error) bool {
 // perfWorker reads binary events from the Probe's event channel,
 // unmarshals the events into Events and sends them on all registered
 // consumers' event channels. Exits if perfUpdateChan or perfDestroyChan are closed.
-func perfWorker(ap *Probe) {
+func (ap *Probe) perfWorker() {
 
 	var eb []byte
 	var ok bool
@@ -199,8 +206,10 @@ func perfWorker(ap *Probe) {
 		select {
 		case eb, ok = <-ap.perfUpdateChan:
 			update = true
+			ap.stats.incrPerfEventsUpdate()
 		case eb, ok = <-ap.perfDestroyChan:
 			update = false
+			ap.stats.incrPerfEventsDestroy()
 		}
 
 		if !ok {
@@ -220,7 +229,7 @@ func perfWorker(ap *Probe) {
 
 // lostWorker increments the Probe's lost field for every message
 // received on its lostChan. Exits if lostChan is closed.
-func lostWorker(ap *Probe) {
+func (ap *Probe) lostWorker() {
 
 	for {
 		_, ok := <-ap.lostChan
@@ -229,7 +238,7 @@ func lostWorker(ap *Probe) {
 			return
 		}
 
-		atomic.AddUint64(&ap.lost, 1)
+		ap.stats.incrPerfEventsLost()
 	}
 }
 
