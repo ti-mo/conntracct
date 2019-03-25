@@ -5,6 +5,7 @@ import (
 
 	"github.com/ti-mo/conntracct/pkg/bpf"
 
+	"github.com/ti-mo/conntracct/internal/sinks/dummy"
 	"github.com/ti-mo/conntracct/internal/sinks/influxdb"
 	"github.com/ti-mo/conntracct/internal/sinks/stdout"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
@@ -56,6 +57,10 @@ func New(cfg types.SinkConfig) (Sink, error) {
 			return nil, err
 		}
 		sink = &std
+	case types.Dummy:
+		d := dummy.New()
+		_ = d.Init(cfg)
+		sink = &d
 	default:
 		return nil, fmt.Errorf("sink type '%s' not implemented", cfg.Type)
 	}
