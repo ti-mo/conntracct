@@ -35,6 +35,9 @@ type SinkConfig struct {
 	// Password of the sink's backing storage.
 	Password string `mapstructure:"password"`
 
+	// Database name of the sink's backing storage.
+	Database string `mapstructure:"database"`
+
 	// Write timeout of the sink's backing storage.
 	Timeout time.Duration `mapstructure:"timeout"`
 }
@@ -85,6 +88,8 @@ func stringToSinkTypeHookFunc() mapstructure.DecodeHookFunc {
 		}
 
 		switch data {
+		case "dummy":
+			return Dummy, nil
 		case "stdout":
 			return StdOut, nil
 		case "stderr":

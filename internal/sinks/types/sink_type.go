@@ -6,7 +6,8 @@ type SinkType uint8
 
 // Enum of supported sink types.
 const (
-	StdOut SinkType = iota
+	Dummy SinkType = iota
+	StdOut
 	StdErr
 	InfluxUDP
 	InfluxHTTP
