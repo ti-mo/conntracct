@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"github.com/pkg/errors"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/ti-mo/conntracct/pkg/bpf"
@@ -30,22 +31,25 @@ func (p *Pipeline) initAcct() error {
 	}
 	log.Infof("Inserted probe version %s", ap.Kernel().Version)
 
-	// Store channel reference so we can launch consumers on them.
-	p.acctUpdateChan = make(chan bpf.Event, 1024)
-	p.acctDestroyChan = make(chan bpf.Event, 1024)
-
 	// Register accounting update/destroy event consumers.
-	au := bpf.NewConsumer("AcctUpdate", p.acctUpdateChan, bpf.ConsumerUpdate)
+	// From the perspective of the pipeline, these are sources.
+	au := bpf.NewConsumer("PipelineAcctUpdate", make(chan bpf.Event, 1024), bpf.ConsumerUpdate)
 	if err := ap.RegisterConsumer(au); err != nil {
 		return errors.Wrap(err, "registering update consumer to probe")
 	}
-	log.Debug("Registered pipeline consumer AcctUpdate")
+	// Store references to the source and its stats.
+	p.acctUpdateSource = au
+	p.stats.UpdateSourceStats = au.Stats()
+	log.Debug("Registered Probe consumer " + au.Name())
 
-	ad := bpf.NewConsumer("AcctDestroy", p.acctDestroyChan, bpf.ConsumerDestroy)
+	ad := bpf.NewConsumer("PipelineAcctDestroy", make(chan bpf.Event, 1024), bpf.ConsumerDestroy)
 	if err := ap.RegisterConsumer(ad); err != nil {
 		return errors.Wrap(err, "registering destroy consumer to probe")
 	}
-	log.Debug("Registered pipeline consumer AcctDestroy")
+	// Store references to the source and its stats.
+	p.acctDestroySource = ad
+	p.stats.DestroySourceStats = ad.Stats()
+	log.Debug("Registered Probe consumer " + ad.Name())
 
 	// Save the Probe reference to the pipeline.
 	p.acctProbe = ap
@@ -69,7 +73,7 @@ func (p *Pipeline) Start() error {
 }
 
 // startAcct starts the Probe and starts goroutines reading Events from
-// update and destroy channels.
+// update and destroy sources.
 func (p *Pipeline) startAcct() error {
 
 	// Start the conntracct event consumer.
@@ -91,8 +95,11 @@ func (p *Pipeline) startAcct() error {
 // This code closely resembles acctDestroyWorker due to this being in the hot
 // path, avoiding as much branching and unnecessary work as possible.
 func (p *Pipeline) acctUpdateWorker() {
+
+	c := p.acctUpdateSource.Events()
+
 	for {
-		ae, ok := <-p.acctUpdateChan
+		ae, ok := <-c
 		if !ok {
 			log.Debug("Pipeline's update event channel closed, stopping worker.")
 			break
@@ -100,7 +107,6 @@ func (p *Pipeline) acctUpdateWorker() {
 
 		// Record pipeline statistics.
 		p.stats.IncrEventsUpdate()
-		p.stats.SetUpdateQueueLen(len(p.acctUpdateChan))
 
 		// Fan out to all registered accounting sinks.
 		p.acctSinkMu.RLock()
@@ -115,8 +121,11 @@ func (p *Pipeline) acctUpdateWorker() {
 
 // acctDestroyWorker is a copy of acctUpdateWorker, but for destroy events.
 func (p *Pipeline) acctDestroyWorker() {
+
+	c := p.acctDestroySource.Events()
+
 	for {
-		ae, ok := <-p.acctDestroyChan
+		ae, ok := <-c
 		if !ok {
 			log.Debug("Pipeline's destroy event channel closed, stopping worker.")
 			break
@@ -124,7 +133,6 @@ func (p *Pipeline) acctDestroyWorker() {
 
 		// Record pipeline statistics.
 		p.stats.IncrEventsDestroy()
-		p.stats.SetDestroyQueueLen(len(p.acctDestroyChan))
 
 		// Fan out to all registered accounting sinks.
 		p.acctSinkMu.RLock()

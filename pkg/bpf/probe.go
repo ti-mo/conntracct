@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/iovisor/gobpf/elf"
 	"github.com/pkg/errors"
@@ -42,7 +41,7 @@ type Probe struct {
 	startMu sync.Mutex
 	started bool
 
-	stats *Stats
+	stats *ProbeStats
 }
 
 // NewProbe instantiates an Probe using the given Config.
@@ -63,7 +62,7 @@ func NewProbe(cfg Config) (*Probe, error) {
 	// Instantiate Probe with selected target kernel struct.
 	ap := Probe{
 		kernel: k,
-		stats:  &Stats{},
+		stats:  &ProbeStats{},
 	}
 
 	// Scan kallsyms before attempting BPF load to avoid arcane error output from eBPF attach.
@@ -177,7 +176,7 @@ func (ap *Probe) ErrChan() chan error {
 }
 
 // Stats returns a snapshot copy of the Probe's statistics.
-func (ap *Probe) Stats() Stats {
+func (ap *Probe) Stats() ProbeStats {
 	return ap.stats.Get()
 }
 
@@ -258,10 +257,12 @@ func (ap *Probe) fanoutEvent(ae Event, update bool) {
 			// Non-blocking send to the consumer's event channel.
 			select {
 			case c.events <- ae:
+				c.stats.setQueueLength(len(c.events))
+				c.stats.incrEventsReceived()
 			default:
 				// If the channel can't be written to immediately,
 				// increment the consumer's lost counter.
-				atomic.AddUint64(&c.lost, 1)
+				c.stats.incrEventsLost()
 			}
 		}
 	}

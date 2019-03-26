@@ -13,12 +13,13 @@ const (
 
 // A Consumer of accounting events.
 type Consumer struct {
-	name string
-
+	name   string
 	events chan Event
-	lost   uint64
 
-	mode ConsumerMode // bitfield for which events to subscribe to
+	// Kinds of events the consumer wants to receive. (update, destroy, all)
+	mode ConsumerMode
+
+	stats *ConsumerStats
 }
 
 // NewConsumer returns a new Consumer.
@@ -32,9 +33,27 @@ func NewConsumer(name string, events chan Event, mode ConsumerMode) *Consumer {
 		name:   name,
 		events: events,
 		mode:   mode,
+		stats:  &ConsumerStats{},
 	}
 
 	return &ac
+}
+
+// Name returns the consumer's name.
+func (ac *Consumer) Name() string {
+	return ac.name
+}
+
+// Events returns the consumer's Event channel.
+func (ac *Consumer) Events() <-chan Event {
+	return ac.events
+}
+
+// Stats returns a reference to the Consumer's ConsumerStats structure.
+// This structure is updated using sync/atomic. Use the ConsumerStats' Get()
+// methods to obtain a copy created using atomic loads.
+func (ac *Consumer) Stats() *ConsumerStats {
+	return ac.stats
 }
 
 // WantUpdate returns whether or not this consumer wants to receive update events.

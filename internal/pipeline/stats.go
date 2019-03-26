@@ -2,6 +2,8 @@ package pipeline
 
 import (
 	"sync/atomic"
+
+	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 // Stats holds various statistics and information about the
@@ -13,9 +15,8 @@ type Stats struct {
 	EventsUpdate  uint64 `json:"events_update"`
 	EventsDestroy uint64 `json:"events_destroy"`
 
-	// length of the Event queues
-	UpdateQueueLen  uint64 `json:"update_queue_length"`
-	DestroyQueueLen uint64 `json:"destroy_queue_length"`
+	UpdateSourceStats  *bpf.ConsumerStats `json:"update_source"`
+	DestroySourceStats *bpf.ConsumerStats `json:"destroy_source"`
 }
 
 // incrEventsTotal atomically increases the total event counter by one.
@@ -37,25 +38,28 @@ func (s *Stats) IncrEventsDestroy() {
 	s.incrEventsTotal()
 }
 
-// SetUpdateQueueLen atomically sets the update queue length.
-func (s *Stats) SetUpdateQueueLen(l int) {
-	atomic.StoreUint64(&s.UpdateQueueLen, uint64(l))
-}
-
-// SetDestroyQueueLen atomically sets the update queue length.
-func (s *Stats) SetDestroyQueueLen(l int) {
-	atomic.StoreUint64(&s.DestroyQueueLen, uint64(l))
-}
-
 // Get returns a copy of the Stats structure created using atomic loads.
 // The values can be inconsistent with each other, as they are written and
 // read concurrently without locks.
 func (s *Stats) Get() Stats {
-	return Stats{
-		EventsTotal:     atomic.LoadUint64(&s.EventsTotal),
-		EventsUpdate:    atomic.LoadUint64(&s.EventsUpdate),
-		EventsDestroy:   atomic.LoadUint64(&s.EventsDestroy),
-		UpdateQueueLen:  atomic.LoadUint64(&s.UpdateQueueLen),
-		DestroyQueueLen: atomic.LoadUint64(&s.DestroyQueueLen),
+
+	out := Stats{
+		EventsTotal:   atomic.LoadUint64(&s.EventsTotal),
+		EventsUpdate:  atomic.LoadUint64(&s.EventsUpdate),
+		EventsDestroy: atomic.LoadUint64(&s.EventsDestroy),
 	}
+
+	// Get Update source stats if present.
+	if s.UpdateSourceStats != nil {
+		s := s.UpdateSourceStats.Get()
+		out.UpdateSourceStats = &s
+	}
+
+	// Get Destroy source stats if present.
+	if s.DestroySourceStats != nil {
+		s := s.DestroySourceStats.Get()
+		out.DestroySourceStats = &s
+	}
+
+	return out
 }

@@ -14,10 +14,10 @@ import (
 type Pipeline struct {
 	start sync.Once
 
-	init            sync.Once
-	acctProbe       *bpf.Probe
-	acctUpdateChan  chan bpf.Event
-	acctDestroyChan chan bpf.Event
+	init              sync.Once
+	acctProbe         *bpf.Probe
+	acctUpdateSource  *bpf.Consumer
+	acctDestroySource *bpf.Consumer
 
 	acctSinkMu sync.RWMutex
 	acctSinks  []sinks.Sink
@@ -74,7 +74,7 @@ func (p *Pipeline) Stop() error {
 }
 
 // ProbeStats returns a snapshot copy of the pipeline's probe's statistics.
-func (p *Pipeline) ProbeStats() bpf.Stats {
+func (p *Pipeline) ProbeStats() bpf.ProbeStats {
 	return p.acctProbe.Stats()
 }
 

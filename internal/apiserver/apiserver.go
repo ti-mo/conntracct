@@ -6,6 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gorilla/mux"
+
 	"github.com/ti-mo/conntracct/internal/pipeline"
 )
 
