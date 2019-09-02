@@ -103,6 +103,7 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 		}
 
 		// Ensure the database with the given name is created.
+		// Does not return an error if the database already exists.
 		q := influx.NewQuery("CREATE DATABASE "+sc.Database, "", "")
 		if r, err := c.Query(q); err != nil {
 			return err
@@ -196,7 +197,7 @@ func (s *InfluxSink) Name() string {
 	return s.config.Name
 }
 
-// IsInit checks if the InfluxDB accounting sink was successfully initialized.
+// IsInit returns true if the InfluxDB accounting sink was successfully initialized.
 func (s *InfluxSink) IsInit() bool {
 	return s.init
 }
