@@ -3,8 +3,6 @@ package pipeline
 import (
 	"sync"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/ti-mo/conntracct/internal/sinks"
 	"github.com/ti-mo/conntracct/pkg/bpf"
 )
@@ -52,8 +50,6 @@ func (p *Pipeline) RegisterSink(s sinks.Sink) error {
 
 	// Add the acctSink to the pipeline.
 	p.acctSinks = append(p.acctSinks, s)
-
-	log.Infof("Registered accounting sink '%s' to pipeline", s.Name())
 
 	return nil
 }
