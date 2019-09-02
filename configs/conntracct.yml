@@ -40,6 +40,14 @@ sinks:
     batchSize: 200
     sourcePorts: false
 
+  elastic:
+    type: elastic
+    address: "http://localhost:9200"  # comma-separated list of elasticsearch server URLs
+    # username: my-username  # basic HTTP auth username
+    # password: my-password  # basic HTTP auth password
+    # apikey: my-api-key     # XPack API key (https://www.elastic.co/guide/en/elasticsearch/reference/current/security-api-create-api-key.html)
+    # cloudid: 12345         # elasticsearch SaaS CloudID
+
   dummy:
     type: dummy
 

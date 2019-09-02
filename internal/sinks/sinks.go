@@ -6,6 +6,7 @@ import (
 	"github.com/ti-mo/conntracct/pkg/bpf"
 
 	"github.com/ti-mo/conntracct/internal/sinks/dummy"
+	"github.com/ti-mo/conntracct/internal/sinks/elasticsearch"
 	"github.com/ti-mo/conntracct/internal/sinks/influxdb"
 	"github.com/ti-mo/conntracct/internal/sinks/stdout"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
@@ -50,6 +51,12 @@ func New(cfg types.SinkConfig) (Sink, error) {
 			return nil, err
 		}
 		sink = &idb
+	case types.Elastic:
+		es := elasticsearch.New()
+		if err := es.Init(cfg); err != nil {
+			return nil, err
+		}
+		sink = &es
 	// stdout driver can write to either stdout or stderr.
 	case types.StdOut, types.StdErr:
 		std := stdout.New()

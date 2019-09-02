@@ -38,6 +38,12 @@ type SinkConfig struct {
 	// Database name of the sink's backing storage.
 	Database string `mapstructure:"database"`
 
+	// API key for accessing the sink's backing storage.
+	APIKey string `mapstructure:"apikey"`
+
+	// 'Cloud ID' of the sink's backing storage (ElasticSearch).
+	CloudID string `mapstructure:"cloudid"`
+
 	// Write timeout of the sink's backing storage.
 	Timeout time.Duration `mapstructure:"timeout"`
 }
