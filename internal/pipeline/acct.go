@@ -22,7 +22,7 @@ func (p *Pipeline) Init() error {
 // initAcct initializes the accounting probe and consumers.
 // Should only be called once, eg. gated behind a sync.Once.
 func (p *Pipeline) initAcct() error {
-	cfg := bpf.Config{CooldownMillis: 2000}
+	cfg := bpf.Config{}
 
 	// Create a new accounting probe.
 	ap, err := bpf.NewProbe(cfg)
