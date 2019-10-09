@@ -34,12 +34,12 @@ type CurvePoint struct {
 
 // AgeNanos returns the CurvePoint's Age specifier in nanoseconds.
 func (p CurvePoint) AgeNanos() uint64 {
-	return uint64(p.AgeMillis * 1000000) // 1 ms = 1 million ns
+	return uint64(p.AgeMillis) * 1000000 // 1 ms = 1 million ns
 }
 
 // IntervalNanos returns the CurvePoint's Interval specifier in nanoseconds.
 func (p CurvePoint) IntervalNanos() uint64 {
-	return uint64(p.IntervalMillis * 1000000) // 1 ms = 1 million ns
+	return uint64(p.IntervalMillis) * 1000000 // 1 ms = 1 million ns
 }
 
 const (
@@ -126,7 +126,7 @@ func probeDefaults(cfg *Config) {
 
 	// Curve point 0.
 
-	// Don't touch Curve0.AgeMillis, it should remain 0.
+	// Don't touch Curve0.AgeMillis, it can remain 0.
 	// We allow the user to modify this if they want to ignore
 	// flows younger than a certain age.
 
@@ -155,16 +155,19 @@ func probeDefaults(cfg *Config) {
 
 func probeConfigVerify(cfg Config) error {
 
+	// Ensure curve0 lower than curve1 and curve2.
 	if cfg.Curve0.AgeMillis > cfg.Curve1.AgeMillis ||
 		cfg.Curve0.AgeMillis > cfg.Curve2.AgeMillis {
 		return errCurve0Age
 	}
 
+	// Ensure curve1 between curve0 and curve2.
 	if cfg.Curve1.AgeMillis < cfg.Curve0.AgeMillis ||
 		cfg.Curve1.AgeMillis > cfg.Curve2.AgeMillis {
 		return errCurve1Age
 	}
 
+	// Ensure curve2 greater than curve0 and curve1.
 	if cfg.Curve2.AgeMillis < cfg.Curve0.AgeMillis ||
 		cfg.Curve2.AgeMillis < cfg.Curve1.AgeMillis {
 		return errCurve2Age
