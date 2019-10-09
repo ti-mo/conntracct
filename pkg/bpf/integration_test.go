@@ -34,11 +34,18 @@ func TestMain(m *testing.M) {
 	var err error
 
 	cfg := Config{
-		// One update every n milliseconds after startup burst.
-		// Should be short enough to fit in a test window,
-		// but long enough to allow startup burst to occur without
-		// injecting unwanted events. (eg. on slower machines)
-		CooldownMillis: cd,
+		Curve0: CurvePoint{
+			AgeMillis:      0,
+			IntervalMillis: 10,
+		},
+		Curve1: CurvePoint{
+			AgeMillis:      50,
+			IntervalMillis: 25,
+		},
+		Curve2: CurvePoint{
+			AgeMillis:      100,
+			IntervalMillis: 50,
+		},
 	}
 
 	// Set the required sysctl's for the probe to gather accounting data.
@@ -70,13 +77,11 @@ func TestMain(m *testing.M) {
 	os.Exit(rc)
 }
 
-// Verifies the 'connection startup burst' behaviour of the BPF program,
-// namely logging packet 1, 2, 8 and 32 of a flow.
-func TestProbeStartup(t *testing.T) {
+// Checks if the first packet in a flow is logged,
+func TestProbeFirstPacket(t *testing.T) {
 
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
-	defer ac.Close()
 
 	// Create UDP client.
 	mc := udpecho.Dial(udpServ)
@@ -84,27 +89,10 @@ func TestProbeStartup(t *testing.T) {
 	// Filter BPF Events based on client port.
 	out := filterSourcePort(in, mc.ClientPort())
 
-	// packets 1 and 2
-	// Events are sometimes delivered to userspace out of order.
-	// Since the initial 2 events are delivered very closely to each other,
-	// don't check their packet counts.
 	mc.Ping(1)
-	_, err := readTimeout(out, 10)
+	ev, err := readTimeout(out, 5)
+	assert.EqualValues(t, 1, ev.PacketsOrig+ev.PacketsRet, ev.String())
 	require.NoError(t, err)
-	_, err = readTimeout(out, 10)
-	require.NoError(t, err)
-
-	// packet 8
-	mc.Ping(3)
-	ev, err := readTimeout(out, 10)
-	require.NoError(t, err)
-	assert.EqualValues(t, 8, ev.PacketsOrig+ev.PacketsRet, ev.String())
-
-	// packet 32
-	mc.Ping(12)
-	ev, err = readTimeout(out, 10)
-	require.NoError(t, err)
-	assert.EqualValues(t, 32, ev.PacketsOrig+ev.PacketsRet, ev.String())
 
 	// Further attempt(s) to read from the channel should time out.
 	ev, err = readTimeout(out, 10)
@@ -120,7 +108,6 @@ func TestProbeLongterm(t *testing.T) {
 
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
-	defer ac.Close()
 
 	// Create UDP client.
 	mc := udpecho.Dial(udpServ)
@@ -170,7 +157,6 @@ func TestProbeVerify(t *testing.T) {
 
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
-	defer ac.Close()
 
 	// Create UDP client.
 	mc := udpecho.Dial(udpServ)
