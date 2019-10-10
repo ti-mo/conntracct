@@ -97,7 +97,7 @@ func TestProbeFirstPacket(t *testing.T) {
 	// Send another ping, and expect it to not be logged.
 	// Further attempt(s) to read from the channel should time out.
 	mc.Ping(1)
-	ev, err = readTimeout(out, 10)
+	ev, err = readTimeout(out, 5)
 	assert.EqualError(t, err, "timeout", ev.String())
 
 	require.NoError(t, acctProbe.RemoveConsumer(ac))
@@ -234,13 +234,18 @@ func TestProbeVerify(t *testing.T) {
 
 	// Generate a single dummy event.
 	mc.Nop(1)
-	ev, err := readTimeout(out, 20)
+	ev, err := readTimeout(out, 5)
 	require.NoError(t, err)
 
 	// Network Namespace
 	ns, err := getNSID()
 	require.NoError(t, err)
 	assert.EqualValues(t, ns, ev.NetNS, ev.String())
+
+	// Timestamp is always 0 on the first packet, since it passes
+	// the conntrack accounting code before being in 'confirmed' state.
+	// The nf_conn_tstamp is written in the confirmation routine.
+	assert.EqualValues(t, 0, ev.Start, ev.String())
 
 	// Connmark (default 0)
 	assert.EqualValues(t, 0, ev.Connmark, ev.String())
@@ -257,6 +262,18 @@ func TestProbeVerify(t *testing.T) {
 	assert.EqualValues(t, net.IPv4(127, 0, 0, 1), ev.SrcAddr, ev.String())
 	assert.EqualValues(t, net.IPv4(127, 0, 0, 1), ev.DstAddr, ev.String())
 	assert.EqualValues(t, 17, ev.Proto, ev.String())
+
+	// Wait for the first cooldown period to be over.
+	time.Sleep(10 * time.Millisecond)
+
+	// Generate a second event.
+	mc.Nop(1)
+	ev, err = readTimeout(out, 5)
+	require.NoError(t, err)
+
+	// The nf_conn should be in 'confirmed' state,
+	// so the start timestamp should be written.
+	assert.NotEqual(t, 0, ev.Start, ev.String())
 
 	require.NoError(t, acctProbe.RemoveConsumer(ac))
 }
