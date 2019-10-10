@@ -23,6 +23,99 @@ struct acct_event_t {
   u8 proto;
 };
 
+enum o_config {
+  ConfigReady,
+  ConfigMax,
+};
+
+enum o_config_ratecurve {
+  ConfigCurve0Age,
+  ConfigCurve0Interval,
+  ConfigCurve1Age,
+  ConfigCurve1Interval,
+  ConfigCurve2Age,
+  ConfigCurve2Interval,
+  ConfigCurveMax,
+};
+
+// Magic value that userspace writes into the ConfigReady location when
+// configuration from userspace has completed.
+const int ready_val = 0x90;
+
+// perf map to send update events to userspace.
+struct bpf_map_def SEC("maps/perf_acct_update") perf_acct_update = {
+  .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+  .key_size = sizeof(int),
+  .value_size = sizeof(__u32),
+  .max_entries = 1024,
+};
+
+// perf map to send destroy events to userspace.
+struct bpf_map_def SEC("maps/perf_acct_end") perf_acct_end = {
+  .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+  .key_size = sizeof(int),
+  .value_size = sizeof(__u32),
+  .max_entries = 1024,
+};
+
+// Hash that holds a kernel timestamp per flow indicating when
+// the flow may send its next update event to userspace.
+struct bpf_map_def SEC("maps/flow_cooldown") flow_cooldown = {
+  .type = BPF_MAP_TYPE_HASH,
+  .key_size = sizeof(int),
+  .value_size = sizeof(__u64),
+  .max_entries = 512000,
+};
+
+// Hash that holds a timestamp per flow indicating when the flow
+// was first seen. Used to implement age-based event rate limiting.
+struct bpf_map_def SEC("maps/flow_origin") flow_origin = {
+  .type = BPF_MAP_TYPE_HASH,
+  .key_size = sizeof(int),
+  .value_size = sizeof(__u64),
+  .max_entries = 512000,
+};
+
+// Communication channel between the kprobe and the kretprobe.
+// Holds a pointer to the nf_conn in the hot path (kprobe) and
+// reads + deletes it in the kretprobe.
+struct bpf_map_def SEC("maps/currct") currct = {
+  .type = BPF_MAP_TYPE_PERCPU_HASH,
+  .key_size = sizeof(int),
+  .value_size = sizeof(void *),
+  .max_entries = 2048,
+};
+
+// Map holding configuration values for this BPF program.
+// Indexed by enum o_config.
+struct bpf_map_def SEC("maps/config") config = {
+  .type = BPF_MAP_TYPE_ARRAY,
+  .key_size = sizeof(int),
+  .value_size = sizeof(void *),
+  .max_entries = ConfigMax,
+};
+
+// Array holding pairs of (age, interval) values,
+// used for age-based rate limiting.
+// Indexed by enum o_config_ratecurve.
+struct bpf_map_def SEC("maps/config_ratecurve") config_ratecurve = {
+  .type = BPF_MAP_TYPE_ARRAY,
+  .key_size = sizeof(int),
+  .value_size = sizeof(void *),
+  .max_entries = ConfigCurveMax,
+};
+
+// probe_ready reads the `config` array map for the Ready flag.
+// It returns true if the Ready flag is set to 0x90 (go).
+__attribute__((always_inline))
+static bool probe_ready() {
+  
+  u64 oc_ready = ConfigReady;
+  u64 *rp = bpf_map_lookup_elem(&config, &oc_ready);
+  
+  return (rp && *rp == ready_val);
+}
+
 // get_acct_ext gets a reference to the nf_conn's accounting extension.
 // Returns non-zero on error.
 __attribute__((always_inline))
@@ -72,9 +165,14 @@ static int get_ts_ext(struct nf_conn_tstamp **ts_ext, struct nf_conn *ct) {
   return 0;
 }
 
-// extract_counters extracts accounting info from an nf_conn_acct into acct_event_t.
+// extract_counters extracts accounting info from an nf_conn into acct_event_t.
+// Returns 0 if acct extension was present in ct.
 __attribute__((always_inline))
-static void extract_counters(struct acct_event_t *data, struct nf_conn_acct *acct_ext) {
+static int extract_counters(struct acct_event_t *data, struct nf_conn *ct) {
+
+  struct nf_conn_acct *acct_ext = 0;
+  if (get_acct_ext(&acct_ext, ct))
+    return -1;
 
   struct nf_conn_counter ctr[IP_CT_DIR_MAX];
   bpf_probe_read(&ctr, sizeof(ctr), &acct_ext->counter);
@@ -85,12 +183,21 @@ static void extract_counters(struct acct_event_t *data, struct nf_conn_acct *acc
   data->packets_ret = ctr[IP_CT_DIR_REPLY].packets.counter;
   data->bytes_ret = ctr[IP_CT_DIR_REPLY].bytes.counter;
 
+  return 0;
 }
 
-// extract_tstamp extracts the start timestamp of nf_conn_tstamp into acct_event_t.
+// extract_tstamp extracts the start timestamp of nf_conn_tstamp inside an nf_conn
+// into acct_event_t. Returns 0 if timestamp extension was present in ct.
 __attribute__((always_inline))
-static void extract_tstamp(struct acct_event_t *data, struct nf_conn_tstamp *ts_ext) {
+static int extract_tstamp(struct acct_event_t *data, struct nf_conn *ct) {
+
+  struct nf_conn_tstamp *ts_ext = 0;
+  if (get_ts_ext(&ts_ext, ct))
+    return -1;
+  
   bpf_probe_read(&data->start, sizeof(data->start), &ts_ext->start);
+  
+  return 0;
 }
 
 // extract_tuple extracts tuple information (proto, src/dest ip and port) of an nf_conn
@@ -128,67 +235,163 @@ static void extract_netns(struct acct_event_t *data, struct nf_conn *ct) {
   }
 }
 
-struct bpf_map_def SEC("maps/perf_acct_update") perf_acct_update = {
-	.type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-	.key_size = sizeof(int),
-	.value_size = sizeof(__u32),
-	.max_entries = 1024,
-	.pinning = 0,
-	.namespace = "",
-};
+// curve_get returns an entry from the curve array as a signed 64-bit integer.
+// Returns negative if an entry was not found at the requested index.
+__attribute__((always_inline))
+static s64 curve_get(enum o_config_ratecurve curve_enum) {
+  
+  int offset = curve_enum;
+  u64 *confp = bpf_map_lookup_elem(&config_ratecurve, &offset);
+  if (confp)
+    return *confp;
 
-struct bpf_map_def SEC("maps/perf_acct_end") perf_acct_end = {
-	.type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-	.key_size = sizeof(int),
-	.value_size = sizeof(__u32),
-	.max_entries = 1024,
-	.pinning = 0,
-	.namespace = "",
-};
+  return -1;
+}
 
-struct bpf_map_def SEC("maps/nextupd") nextupd = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(int),
-	.value_size = sizeof(void *),
-	.max_entries = 1024,
-	.pinning = 0,
-	.namespace = "",
-};
+// flow_cooldown_expired returns true if the flow's cooldown period is over.
+__attribute__((always_inline))
+static bool flow_cooldown_expired(struct nf_conn *ct, u64 ts) {
 
-struct bpf_map_def SEC("maps/currct") currct = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(int),
-	.value_size = sizeof(void *),
-	.max_entries = 1024,
-	.pinning = 0,
-	.namespace = "",
-};
+  // Look up the flow's cooldown expiration time.
+  u64 *nextp = bpf_map_lookup_elem(&flow_cooldown, &ct);
+  u64 next = 0;
+  if (nextp)
+    next = *nextp;
 
-struct bpf_map_def SEC("maps/config") config = {
-	.type = BPF_MAP_TYPE_HASH,
-	.key_size = sizeof(int),
-	.value_size = sizeof(void *),
-	.max_entries = 1,
-	.pinning = 0,
-	.namespace = "",
-};
+  // Cooldown has expired if the current timestamp is greater
+  // or equal than the stored expiration time.
+  return (ts >= next);
+}
 
+// flow_initialize_origin sets the first-seen timestamp of the nf_conn
+// to ts. If pkts_total is larger than one, the flow is considered as old as
+// the second age threshold (curve1age), to protect against event storms
+// when the program is restarted.
+// This call is write-once due to BPF_NOEXIST.
+__attribute__((always_inline))
+static u64 flow_initialize_origin(struct nf_conn *ct, u64 ts, u64 pkts_total) {
+
+  u64 origin = ts;
+
+  // pkts_total is evaluated to account for flows that existed before 
+  if (pkts_total < 2)
+    goto update;
+
+  s64 curve1_age = curve_get(ConfigCurve1Age);
+  if (curve1_age < 0)
+    goto update;
+
+  // Make sure current timestamp is larger than the curve point to prevent rollover.
+  if (origin > curve1_age) {
+    origin -= curve1_age;
+  } else {
+    // Clamp the origin to zero (boottime of the machine).
+    origin = 0;
+  }
+
+update:
+  bpf_map_update_elem(&flow_origin, &ct, &origin, BPF_NOEXIST);
+
+  return origin;
+}
+
+// flow_get_age looks up the flow in the first-seen (origin)
+// hashmap. The time elapsed between the origin and the given
+// ts is returned. If there is no first-seen timestamp for the
+// flow, returns a zero value.
+__attribute__((always_inline))
+static u64 flow_get_age(struct nf_conn *ct, u64 ts) {
+
+  // Initialize origin to the current timestamp so a lookup miss
+  // causes a 0ns age to be returned. (new or unknown flows)
+  u64 origin = ts;
+
+  u64 *originp = bpf_map_lookup_elem(&flow_origin, &ct);
+  if (originp)
+    origin = *originp;
+
+  return ts - origin;
+}
+
+// flow_get_interval returns the interval (cooldown period) to be set
+// for the flow during the current event.
+// Returns negative if the flow is younger than the minimum age threshold,
+// or if an internal curve lookup error occurred.
+__attribute__((always_inline))
+static s64 flow_get_interval(struct nf_conn *ct, u64 ts) {
+
+  // Always returns a positive or 0 value.
+  u64 age = flow_get_age(ct, ts);
+
+  // Don't consider flows that are under a minimum age.
+  // Return negative interval to signal that the event should be dropped.
+  s64 curve0_age = curve_get(ConfigCurve0Age);
+  if (curve0_age < 0) return -1;
+  if (age < curve0_age)
+    return -1;
+
+  // Between age 0 and age 1, use interval 0.
+  s64 curve1_age = curve_get(ConfigCurve1Age);
+  if (curve1_age < 0) return -1;
+  if (age < curve1_age)
+    return curve_get(ConfigCurve0Interval);
+
+  // Between age 1 and age 2, use interval 1.
+  s64 curve2_age = curve_get(ConfigCurve2Age);
+  if (curve2_age < 0) return -1;
+  if (age < curve2_age)
+    return curve_get(ConfigCurve1Interval);
+
+  // Beyond age 2, use interval 2.
+  return curve_get(ConfigCurve2Interval);
+}
+
+__attribute__((always_inline))
+static u64 flow_set_cooldown(struct nf_conn *ct, u64 ts) {
+
+  // Get the update interval for this flow.
+  // A negative result indicates that the event should be dropped
+  // due to the flow being too young or a failing rate curve lookup.
+  s64 interval = flow_get_interval(ct, ts);
+  if (interval < 0)
+    return 0;
+
+  // Set the cooldown expiration time to the current timestamp plus
+  // the cooldown period.
+  u64 next = ts + interval;
+  bpf_map_update_elem(&flow_cooldown, &ct, &next, BPF_ANY);
+
+  return interval;
+}
+
+// flow_cleanup removes all possible map entries related to the connection.
+__attribute__((always_inline))
+static void flow_cleanup(struct nf_conn *ct) {
+  bpf_map_delete_elem(&flow_cooldown, &ct);
+  bpf_map_delete_elem(&flow_origin, &ct);
+}
 
 SEC("kprobe/__nf_ct_refresh_acct")
 int kprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
+
+  if (!probe_ready())
+    return 0;
 
   struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
 
   u32 pid = bpf_get_current_pid_tgid();
 
-	// stash the conntrack pointer for lookup on return
-	bpf_map_update_elem(&currct, &pid, &ct, BPF_ANY);
+  // stash the conntrack pointer for lookup on return
+  bpf_map_update_elem(&currct, &pid, &ct, BPF_ANY);
 
-	return 0;
+  return 0;
 }
 
 SEC("kretprobe/__nf_ct_refresh_acct")
 int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
+
+  if (!probe_ready())
+    return 0;
 
   u32 pid = bpf_get_current_pid_tgid();
   u64 ts = bpf_ktime_get_ns();
@@ -196,22 +399,12 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   // Look up the conntrack structure stashed by the kprobe.
   struct nf_conn **ctp;
   ctp = bpf_map_lookup_elem(&currct, &pid);
-	if (ctp == 0)
-		return 0;
+  if (ctp == 0)
+    return 0;
 
   // Dereference and delete from the stash table.
   struct nf_conn *ct = *ctp;
   bpf_map_delete_elem(&currct, &pid);
-
-  // Obtain reference to accounting conntrack extension.
-  struct nf_conn_acct *acct_ext = 0;
-  if (get_acct_ext(&acct_ext, ct))
-    return 0;
-
-  // Initialize cooldown value in the config map to 2 seconds.
-  u64 config_cd = 0;
-  u64 def_cd = 2000000000;
-  bpf_map_update_elem(&config, &config_cd, &def_cd, BPF_NOEXIST);
 
   // Allocate event struct after all checks have succeeded.
   struct acct_event_t data = {
@@ -222,60 +415,43 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
 
   // Pull counters onto the BPF stack first, so that we can make event rate
   // limiting decisions based on packet counters without doing unnecessary work.
-  extract_counters(&data, acct_ext);
+  // Return if extracting counters fails, which is possible on untracked flows.
+  if (extract_counters(&data, ct))
+    return 0;
 
-  // Sample accounting events from the kernel using a hybrid rate limiting model.
-  // On every event that is sent, a future deadline is set for that specific flow
-  // equal to the cooldown time. Every packet that is handled when the dealine has
-  // not yet come, has to either be the 1st, 2nd, 8th or 32nd total packet in the flow
-  // to be sent as an event. This ensures that flows generate an event at least and
-  // at most once per deadline.
-  // Packets 1, 2, 8 and 32 are always sent and also increase the deadline. The first
-  // packet is always sent because the current timestamp is always past the default (0).
-
-  // Look up the cooldown value in the config map.
-  u64 *cdp = bpf_map_lookup_elem(&config, &config_cd);
-  u64 cd = def_cd; // Initialize to the default to make sure there is a value.
-  if (cdp) {
-    cd = *cdp;
-  }
-
+// Sample accounting events from the kernel using a curve-based rate limiter.
+// On every event that is sent, the flow that caused it is given a cooldown
+// period during which it cannot send more events. The length of this period
+// depends on the age of the flow. The older the flow, the longer the period,
+// and the lower the update frequency. The age thresholds and update intervals
+// can be configured through the 'config_ratecurve' map.
   u64 pkts_total = (data.packets_orig + data.packets_ret);
+  if (pkts_total > 1 && !flow_cooldown_expired(ct, ts))
+    return 0;
 
-  // Look up when the next event is scheduled to be sent to userspace.
-  u64 *nextp = bpf_map_lookup_elem(&nextupd, &ct);
-  u64 next = 0;
-  if (nextp)
-    next = *nextp;
+  // Store a reference timestamp ('origin') to allow future event cycles to
+  // determine the age of the flow. This is write-once and will only store
+  // a value on the first call of each flow.
+  flow_initialize_origin(ct, ts, pkts_total);
 
-  // The deadline has not yet expired, but we allow certain exceptions.
-  if (ts < next) {
-    if (pkts_total > 32) {
-      // Flow is no longer in burst mode and will only be sampled after deadline.
-      return 0;
-    } else {
-      // Flow is in burst mode (flow start), check if the current packet
-      // matches any of the pre-defined checkpoints for sending an event.
-      if ( ! (pkts_total == 2 ||
-              pkts_total == 8 ||
-              pkts_total == 32))
-        return 0;
-    }
-  }
+  // Set the cooldown expiration to the current timestamp plus a cooldown period
+  // based on the age of the flow. flow_set_cooldown returns negative if
+  // the event should be dropped due to the flow being too young or
+  // because of an internal curve lookup error.
+  if (flow_set_cooldown(ct, ts) < 0)
+    return 0;
 
   // Extract proto, src/dst address and ports.
   extract_tuple(&data, ct);
   // Extract network namespace identifier (inode).
   extract_netns(&data, ct);
+  // Extract the start timestamp of a flow.
+  extract_tstamp(&data, ct);
   // Extract conntrack connection mark.
   bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
 
   // Submit event to userspace.
   bpf_perf_event_output(ctx, &perf_acct_update, CUR_CPU_IDENTIFIER, &data, sizeof(data));
-
-  // Set the deadline to the current timestamp plus the cooldown period.
-  next = ts + cd;
-  bpf_map_update_elem(&nextupd, &ct, &next, BPF_ANY);
 
   return 0;
 }
@@ -283,19 +459,15 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
 SEC("kprobe/nf_conntrack_free")
 int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
 
+  if (!probe_ready())
+    return 0;
+
   u64 ts = bpf_ktime_get_ns();
 
   struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
 
-  // Remove next-update entry for connection.
-  bpf_map_delete_elem(&nextupd, &ct);
-
-  // Below this point, the kprobe can return early,
-  // make sure all bookkeeping is handled above.
-
-  struct nf_conn_acct *acct_ext = 0;
-  if (get_acct_ext(&acct_ext, ct))
-    return 0;
+  // Remove references to this nf_conn from bookkeeping.
+  flow_cleanup(ct);
 
   struct acct_event_t data = {
     .start = 0,
@@ -303,13 +475,13 @@ int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
     .cid = (u32)ct,
   };
 
-  struct nf_conn_tstamp *ts_ext = 0;
-  if (get_ts_ext(&ts_ext, ct) == 0)
-    extract_tstamp(&data, ts_ext);
+  // Ignore the event if the nf_conn doesn't contain counters.
+  if (extract_counters(&data, ct))
+    return 0;
 
-  extract_counters(&data, acct_ext);
   extract_tuple(&data, ct);
   extract_netns(&data, ct);
+  extract_tstamp(&data, ct);
   bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
 
   bpf_perf_event_output(ctx, &perf_acct_end, CUR_CPU_IDENTIFIER, &data, sizeof(data));

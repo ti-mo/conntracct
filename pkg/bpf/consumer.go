@@ -66,11 +66,6 @@ func (ac *Consumer) WantDestroy() bool {
 	return (ac.mode & ConsumerDestroy) > 0
 }
 
-// Close closes the Consumer's event channel.
-func (ac *Consumer) Close() {
-	close(ac.events)
-}
-
 // RegisterConsumer registers an Consumer in an Probe.
 func (ap *Probe) RegisterConsumer(ac *Consumer) error {
 
@@ -114,6 +109,8 @@ func (ap *Probe) RemoveConsumer(ac *Consumer) error {
 			ap.consumers[len(ap.consumers)-1] = nil
 			// Shrink the slice by one element.
 			ap.consumers = ap.consumers[:len(ap.consumers)-1]
+
+			close(c.events)
 
 			return nil
 		}

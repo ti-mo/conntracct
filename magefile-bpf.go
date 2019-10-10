@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 
@@ -48,6 +49,15 @@ func (Bpf) Clean() error {
 
 // Build builds all BPF programs against all defined kernels.
 func (Bpf) Build() error {
+
+	// Basic check for build dependencies to avoid ugly errors.
+	buildTools := []string{"clang", "llc", "statik"}
+	for _, t := range buildTools {
+		if _, err := exec.LookPath(t); err != nil {
+			return fmt.Errorf("conntracct needs the following tools to build the eBPF probe: %s. %s",
+				strings.Join(buildTools, ", "), err)
+		}
+	}
 
 	// Create build target directory.
 	if err := os.MkdirAll(bpfAcctBuildPath, os.ModePerm); err != nil {
