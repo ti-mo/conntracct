@@ -34,16 +34,16 @@ func TestMain(m *testing.M) {
 
 	cfg := Config{
 		Curve0: CurvePoint{
-			AgeMillis:      0,
-			IntervalMillis: 10,
+			Age:  0 * time.Millisecond,
+			Rate: 10 * time.Millisecond,
 		},
 		Curve1: CurvePoint{
-			AgeMillis:      50,
-			IntervalMillis: 25,
+			Age:  50 * time.Millisecond,
+			Rate: 25 * time.Millisecond,
 		},
 		Curve2: CurvePoint{
-			AgeMillis:      100,
-			IntervalMillis: 50,
+			Age:  100 * time.Millisecond,
+			Rate: 50 * time.Millisecond,
 		},
 	}
 

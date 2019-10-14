@@ -5,6 +5,25 @@
 api_enabled: true
 api_endpoint: "localhost:8000"
 
+# Accounting probe configuration.
+probe:
+  # Update rate interval. rate_curve has 3 configurable curve points.
+  #
+  # When a flow is older than the age of the first curve point, it will send updates
+  # at the configured rate. In this example, all flows start out at one event per 20 seconds.
+  # Once it reaches the age of the next curve point (60 seconds), it will send updates
+  # once every 60 seconds, etc.
+  rate_curve:
+    0:
+      age: 0
+      rate: 20s
+    1:
+      age: 60s
+      rate: 60s
+    2:
+      age: 5m
+      rate: 5m
+
 # Data Sinks (outputs)
 sinks:
   influxdb_udp:
