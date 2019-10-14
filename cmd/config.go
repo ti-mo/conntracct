@@ -19,12 +19,32 @@ var (
 	cfgPProfEndpoint = "pprof_endpoint"
 
 	cfgSinks = "sinks"
+	cfgProbe = "probe"
+
+	cfgProbeRateCurve = "rate_curve"
 
 	// Default application configuration.
 	cfgDefaults = map[string]interface{}{
 		// HTTP API endpoint.
 		cfgAPIEnabled:  true,
 		cfgAPIEndpoint: "localhost:8000",
+
+		cfgProbe: map[string]interface{}{
+			cfgProbeRateCurve: map[string]interface{}{
+				"1": map[string]interface{}{
+					"age":  "0",
+					"rate": "20s",
+				},
+				"2": map[string]interface{}{
+					"age":  "60s",
+					"rate": "60s",
+				},
+				"3": map[string]interface{}{
+					"age":  "5m",
+					"rate": "5m",
+				},
+			},
+		},
 
 		// Sinks for accounting data.
 		cfgSinks: map[string]interface{}{

@@ -37,13 +37,10 @@ func run(cmd *cobra.Command, args []string) error {
 		pprof.ListenAndServe(viper.GetString(cfgPProfEndpoint))
 	}
 
-	scfg, err := types.DecodeSinkConfigMap(viper.GetStringMap(cfgSinks))
+	pcfg, scfg, err := getConfig()
 	if err != nil {
 		return err
 	}
-
-	// Log decoded config map to debug.
-	log.Debugf("Sink configuration: %+v", scfg)
 
 	pipe := pipeline.New()
 
@@ -52,9 +49,10 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize and start accounting pipeline.
-	if err := pipe.Init(); err != nil {
+	if err := pipe.Init(pcfg); err != nil {
 		return errors.Wrap(err, "initialize pipeline")
 	}
+
 	if err := pipe.Start(); err != nil {
 		return errors.Wrap(err, "start pipeline")
 	}
@@ -64,6 +62,7 @@ func run(cmd *cobra.Command, args []string) error {
 		if err := apiserver.Init(pipe); err != nil {
 			return err
 		}
+
 		if err := apiserver.Run(viper.GetString(cfgAPIEndpoint)); err != nil {
 			return err
 		}
@@ -86,4 +85,25 @@ func run(cmd *cobra.Command, args []string) error {
 	log.Info("Exiting with signal ", <-sig)
 
 	return nil
+}
+
+func getConfig() (*config.ProbeConfig, []types.SinkConfig, error) {
+
+	// Get probe configuration from Viper.
+	pcfg, err := config.DecodeProbeConfigMap(viper.GetStringMap(cfgProbe))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	log.Debugf("Read probe configuration: %+v", *pcfg)
+
+	// Get sink configuration from Viper.
+	scfg, err := types.DecodeSinkConfigMap(viper.GetStringMap(cfgSinks))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	log.Debugf("Read sink configuration: %+v", scfg)
+
+	return pcfg, scfg, nil
 }
