@@ -5,15 +5,18 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/ti-mo/conntracct/internal/config"
+
 	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 // Init initializes the pipeline. Only runs once, subsequent calls are no-ops.
-func (p *Pipeline) Init() error {
+func (p *Pipeline) Init(pc *config.ProbeConfig) error {
 
 	var err error
+
 	p.init.Do(func() {
-		err = p.initAcct()
+		err = p.initAcct(pc)
 	})
 
 	return err
@@ -21,14 +24,17 @@ func (p *Pipeline) Init() error {
 
 // initAcct initializes the accounting probe and consumers.
 // Should only be called once, eg. gated behind a sync.Once.
-func (p *Pipeline) initAcct() error {
-	cfg := bpf.Config{}
+func (p *Pipeline) initAcct(pc *config.ProbeConfig) error {
+
+	// Extract BPF configuration from app configuration.
+	cfg := pc.BPFConfig()
 
 	// Create a new accounting probe.
 	ap, err := bpf.NewProbe(cfg)
 	if err != nil {
 		return errors.Wrap(err, "initializing BPF probe")
 	}
+
 	log.Infof("Inserted probe version %s", ap.Kernel().Version)
 
 	// Register accounting update/destroy event consumers.
@@ -65,6 +71,7 @@ func (p *Pipeline) Start() error {
 	}
 
 	var err error
+
 	p.start.Do(func() {
 		err = p.startAcct()
 	})
