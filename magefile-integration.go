@@ -20,15 +20,24 @@ const (
 // Test runs integration tests requiring root.
 func (Integration) Test() error {
 
-	args := []string{"test", "-v", "-race", "-coverprofile=" + intCov, "-covermode=atomic", "-tags=integration", "./..."}
+	testArgs := []string{"test", "-v", "-race", "-coverprofile=" + intCov, "-covermode=atomic", "-tags=integration", "./..."}
+
+	modprobeCmd := "modprobe"
+	modprobeArgs := []string{"-aq", "xt_conntrack", "nf_conntrack", "nf_conntrack_ipv4", "nf_conntrack_ipv6"}
 
 	// Execute with sudo when the current UID is not 0.
 	if u, _ := user.Current(); u.Uid != "0" {
 		fmt.Println("Not running with uid 0, using sudo to run integration tests.")
-		args = append(args, "-exec=sudo")
+		testArgs = append(testArgs, "-exec=sudo")
+
+		modprobeCmd = "sudo"
+		modprobeArgs = append([]string{"modprobe"}, modprobeArgs...)
 	}
 
-	if err := sh.RunV("go", args...); err != nil {
+	// Modprobe might fail due to missing modules on some systems, ignore.
+	sh.RunV(modprobeCmd, modprobeArgs...)
+
+	if err := sh.RunV("go", testArgs...); err != nil {
 		return err
 	}
 
