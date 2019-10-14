@@ -1,6 +1,7 @@
 package bpf
 
 import (
+	"time"
 	"unsafe"
 
 	"github.com/pkg/errors"
@@ -10,8 +11,7 @@ import (
 
 var (
 	errCurve0Age = errors.New("Curve point 0's Age needs to be lower than point 1's and point 2's")
-	errCurve1Age = errors.New("Curve point 1's Age needs to be between point 1's and point 2's")
-	errCurve2Age = errors.New("Curve point 2's Age needs to be higher than point 1's and point 2's")
+	errCurve1Age = errors.New("Curve point 1's Age needs to be lower than point 2's")
 )
 
 // Config is a configuration object for the acct BPF probe.
@@ -25,21 +25,11 @@ type Config struct {
 	Curve2 CurvePoint
 }
 
-// A CurvePoint represents an age/interval pair, in milliseconds.
-// It defines the update Interval of a flow that is older than the given Age.
+// A CurvePoint represents an age/rate pair.
+// It defines the update rate of a flow that is older than the given age.
 type CurvePoint struct {
-	AgeMillis      uint32
-	IntervalMillis uint32
-}
-
-// AgeNanos returns the CurvePoint's Age specifier in nanoseconds.
-func (p CurvePoint) AgeNanos() uint64 {
-	return uint64(p.AgeMillis) * 1000000 // 1 ms = 1 million ns
-}
-
-// IntervalNanos returns the CurvePoint's Interval specifier in nanoseconds.
-func (p CurvePoint) IntervalNanos() uint64 {
-	return uint64(p.IntervalMillis) * 1000000 // 1 ms = 1 million ns
+	Age  time.Duration
+	Rate time.Duration
 }
 
 const (
@@ -61,11 +51,11 @@ type curveOffset uint8
 // Enum of indices in the probe's `curve` BPF array.
 const (
 	curve0Age curveOffset = iota
-	curve0Interval
+	curve0Rate
 	curve1Age
-	curve1Interval
+	curve1Rate
 	curve2Age
-	curve2Interval
+	curve2Rate
 )
 
 // configureProbe sets configuration values in the probe's config map.
@@ -81,34 +71,34 @@ func configureProbe(mod *elf.Module, cfg Config) error {
 	configMap := mod.Map("config")
 	curveMap := mod.Map("config_ratecurve")
 
-	k, v := curve0Age, cfg.Curve0.AgeNanos()
+	k, v := curve0Age, cfg.Curve0.Age.Nanoseconds()
 	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
 		return errors.Wrap(err, "Curve0Age in config_ratecurve")
 	}
 
-	k, v = curve0Interval, cfg.Curve0.IntervalNanos()
+	k, v = curve0Rate, cfg.Curve0.Rate.Nanoseconds()
 	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
-		return errors.Wrap(err, "Curve0Interval in config_ratecurve")
+		return errors.Wrap(err, "Curve0Rate in config_ratecurve")
 	}
 
-	k, v = curve1Age, cfg.Curve1.AgeNanos()
+	k, v = curve1Age, cfg.Curve1.Age.Nanoseconds()
 	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
 		return errors.Wrap(err, "Curve1Age in config_ratecurve")
 	}
 
-	k, v = curve1Interval, cfg.Curve1.IntervalNanos()
+	k, v = curve1Rate, cfg.Curve1.Rate.Nanoseconds()
 	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
-		return errors.Wrap(err, "Curve1Interval in config_ratecurve")
+		return errors.Wrap(err, "Curve1Rate in config_ratecurve")
 	}
 
-	k, v = curve2Age, cfg.Curve2.AgeNanos()
+	k, v = curve2Age, cfg.Curve2.Age.Nanoseconds()
 	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
 		return errors.Wrap(err, "Curve2Age in config_ratecurve")
 	}
 
-	k, v = curve2Interval, cfg.Curve2.IntervalNanos()
+	k, v = curve2Rate, cfg.Curve2.Rate.Nanoseconds()
 	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
-		return errors.Wrap(err, "Curve2Interval in config_ratecurve")
+		return errors.Wrap(err, "Curve2Rate in config_ratecurve")
 	}
 
 	// Set the ready bit in the probe's config map to make it start sending traffic.
@@ -130,47 +120,40 @@ func probeDefaults(cfg *Config) {
 	// We allow the user to modify this if they want to ignore
 	// flows younger than a certain age.
 
-	if cfg.Curve0.IntervalMillis == 0 {
-		cfg.Curve0.IntervalMillis = 20000 // 20 seconds
+	if cfg.Curve0.Rate == 0 {
+		cfg.Curve0.Rate = 20 * time.Second
 	}
 
 	// Curve point 1.
-	if cfg.Curve1.AgeMillis == 0 {
-		cfg.Curve1.AgeMillis = 60000 // 60 seconds
+	if cfg.Curve1.Age == 0 {
+		cfg.Curve1.Age = 60 * time.Second
 	}
 
-	if cfg.Curve1.IntervalMillis == 0 {
-		cfg.Curve1.IntervalMillis = 60000 // 60 seconds
+	if cfg.Curve1.Rate == 0 {
+		cfg.Curve1.Rate = 60 * time.Second
 	}
 
 	// Curve point 2.
-	if cfg.Curve2.AgeMillis == 0 {
-		cfg.Curve2.AgeMillis = 300000 // 300 seconds
+	if cfg.Curve2.Age == 0 {
+		cfg.Curve2.Age = 5 * time.Minute
 	}
 
-	if cfg.Curve2.IntervalMillis == 0 {
-		cfg.Curve2.IntervalMillis = 300000 // 300 seconds
+	if cfg.Curve2.Rate == 0 {
+		cfg.Curve2.Rate = 5 * time.Minute
 	}
 }
 
 func probeConfigVerify(cfg Config) error {
 
 	// Ensure curve0 lower than curve1 and curve2.
-	if cfg.Curve0.AgeMillis > cfg.Curve1.AgeMillis ||
-		cfg.Curve0.AgeMillis > cfg.Curve2.AgeMillis {
+	if cfg.Curve0.Age >= cfg.Curve1.Age ||
+		cfg.Curve0.Age >= cfg.Curve2.Age {
 		return errCurve0Age
 	}
 
 	// Ensure curve1 between curve0 and curve2.
-	if cfg.Curve1.AgeMillis < cfg.Curve0.AgeMillis ||
-		cfg.Curve1.AgeMillis > cfg.Curve2.AgeMillis {
+	if cfg.Curve1.Age >= cfg.Curve2.Age {
 		return errCurve1Age
-	}
-
-	// Ensure curve2 greater than curve0 and curve1.
-	if cfg.Curve2.AgeMillis < cfg.Curve0.AgeMillis ||
-		cfg.Curve2.AgeMillis < cfg.Curve1.AgeMillis {
-		return errCurve2Age
 	}
 
 	return nil
