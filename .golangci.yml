@@ -1,6 +1,12 @@
 ---
 linters:
-  enable-all: true
+  presets:
+    - unused
+    - performance
+    - format
+    - complexity
+    - bugs
+
   disable:
     - gochecknoinits
     - gochecknoglobals
