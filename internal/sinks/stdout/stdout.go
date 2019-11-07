@@ -66,15 +66,27 @@ func (s *StdOut) Init(sc types.SinkConfig) error {
 	return nil
 }
 
-// Push an accounting event into the buffer of the StdOut accounting sink.
-func (s *StdOut) Push(e bpf.Event) {
+// PushUpdate pushes an update event into the buffer of the StdOut accounting sink.
+func (s *StdOut) PushUpdate(e bpf.Event) {
 	// Non-blocking send on event channel.
 	select {
 	case s.events <- e:
-		s.stats.IncrEventsPushed()
+		s.stats.IncrUpdateEventsPushed()
 		s.stats.SetBatchLength(len(s.events))
 	default:
-		s.stats.IncrEventsDropped()
+		s.stats.IncrUpdateEventsDropped()
+	}
+}
+
+// PushDestroy pushes a destroy event into the buffer of the StdOut accounting sink.
+func (s *StdOut) PushDestroy(e bpf.Event) {
+	// Non-blocking send on event channel.
+	select {
+	case s.events <- e:
+		s.stats.IncrDestroyEventsPushed()
+		s.stats.SetBatchLength(len(s.events))
+	default:
+		s.stats.IncrDestroyEventsDropped()
 	}
 }
 

@@ -25,13 +25,15 @@ type Sink interface {
 	// Get the sink's name.
 	Name() string
 
-	// Check which kind of events this sink is interested in.
+	// Returns true if the sink wants to receive update events.
 	WantUpdate() bool
+	// Returns true if the sink wants to receive destroy events.
 	WantDestroy() bool
 
-	// Enqueue an accounting event to the sink driver.
-	// Implementation MUST be thread-safe.
-	Push(bpf.Event)
+	// Push an update event to the sink driver. Implementation must be thread-safe.
+	PushUpdate(bpf.Event)
+	// Push a destroy event to the sink driver. Implementation must be thread-safe.
+	PushDestroy(bpf.Event)
 
 	// Get a snapshot copy of the sink's performance statistics.
 	Stats() types.SinkStats

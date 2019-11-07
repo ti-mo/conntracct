@@ -7,10 +7,15 @@ import "sync/atomic"
 // Load*() methods to read values from the structure. The Get() convenience
 // method returns a new instance of itself using atomic loads.
 type SinkStats struct {
-	// Amount of events Push()ed into the sink.
-	EventsPushed uint64 `json:"events_pushed"`
-	// Amount of events failed to be Push()ed into the sink.
-	EventsDropped uint64 `json:"events_dropped"`
+	// Amount of update events pushed into the sink.
+	UpdateEventsPushed uint64 `json:"update_events_pushed"`
+	// Amount of destroy events pushed into the sink.
+	DestroyEventsPushed uint64 `json:"destroy_events_pushed"`
+
+	// Amount of update events failed to be pushed into the sink.
+	UpdateEventsDropped uint64 `json:"update_events_dropped"`
+	// Amount of destroy events failed to be pushed into the sink.
+	DestroyEventsDropped uint64 `json:"destroy_events_dropped"`
 
 	// Current batch length of the sink.
 	BatchLength uint64 `json:"batch_length"`
@@ -20,14 +25,24 @@ type SinkStats struct {
 	BatchesDropped uint64 `json:"batches_dropped"`
 }
 
-// IncrEventsPushed atomically increases the sink's event counter by one.
-func (s *SinkStats) IncrEventsPushed() {
-	atomic.AddUint64(&s.EventsPushed, 1)
+// IncrUpdateEventsPushed atomically increases the sink's update event counter by one.
+func (s *SinkStats) IncrUpdateEventsPushed() {
+	atomic.AddUint64(&s.UpdateEventsPushed, 1)
 }
 
-// IncrEventsDropped atomically increases the sink's dropped event counter by one.
-func (s *SinkStats) IncrEventsDropped() {
-	atomic.AddUint64(&s.EventsDropped, 1)
+// IncrDestroyEventsPushed atomically increases the sink's destroy event counter by one.
+func (s *SinkStats) IncrDestroyEventsPushed() {
+	atomic.AddUint64(&s.DestroyEventsPushed, 1)
+}
+
+// IncrUpdateEventsDropped atomically increases the sink's dropped update event counter by one.
+func (s *SinkStats) IncrUpdateEventsDropped() {
+	atomic.AddUint64(&s.UpdateEventsDropped, 1)
+}
+
+// IncrDestroyEventsDropped atomically increases the sink's dropped destroy event counter by one.
+func (s *SinkStats) IncrDestroyEventsDropped() {
+	atomic.AddUint64(&s.DestroyEventsDropped, 1)
 }
 
 // SetBatchLength sets the length of the current batch.
@@ -50,10 +65,12 @@ func (s *SinkStats) IncrBatchSent() {
 // read concurrently without locks.
 func (s *SinkStats) Get() SinkStats {
 	return SinkStats{
-		EventsPushed:   atomic.LoadUint64(&s.EventsPushed),
-		EventsDropped:  atomic.LoadUint64(&s.EventsDropped),
-		BatchLength:    atomic.LoadUint64(&s.BatchLength),
-		BatchesSent:    atomic.LoadUint64(&s.BatchesSent),
-		BatchesDropped: atomic.LoadUint64(&s.BatchesDropped),
+		UpdateEventsPushed:   atomic.LoadUint64(&s.UpdateEventsPushed),
+		DestroyEventsPushed:  atomic.LoadUint64(&s.DestroyEventsPushed),
+		UpdateEventsDropped:  atomic.LoadUint64(&s.UpdateEventsDropped),
+		DestroyEventsDropped: atomic.LoadUint64(&s.DestroyEventsDropped),
+		BatchLength:          atomic.LoadUint64(&s.BatchLength),
+		BatchesSent:          atomic.LoadUint64(&s.BatchesSent),
+		BatchesDropped:       atomic.LoadUint64(&s.BatchesDropped),
 	}
 }

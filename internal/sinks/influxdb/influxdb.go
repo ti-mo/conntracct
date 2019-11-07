@@ -133,9 +133,19 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 	return nil
 }
 
-// Push an accounting event into the buffer of the InfluxDB accounting sink.
-// Adds data points to the InfluxDB client buffer in a thread-safe manner.
-func (s *InfluxSink) Push(e bpf.Event) {
+// PushUpdate pushes an update event into the buffer of the InfluxDB accounting sink.
+func (s *InfluxSink) PushUpdate(e bpf.Event) {
+	s.push(e)
+	s.stats.IncrUpdateEventsPushed()
+}
+
+// PushDestroy pushes a destroy event into the buffer of the InfluxDB accounting sink.
+func (s *InfluxSink) PushDestroy(e bpf.Event) {
+	s.push(e)
+	s.stats.IncrDestroyEventsPushed()
+}
+
+func (s *InfluxSink) push(e bpf.Event) {
 
 	// Create a point and add to batch.
 	tags := map[string]string{
@@ -181,7 +191,6 @@ func (s *InfluxSink) Push(e bpf.Event) {
 
 	// Record statistics.
 	s.stats.SetBatchLength(batchLen)
-	s.stats.IncrEventsPushed()
 
 	// Flush the batch when the watermark is reached.
 	if batchLen >= int(s.config.BatchSize) {

@@ -86,8 +86,13 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 	return nil
 }
 
-// Push an accounting event into the buffer of the ElasticSearch accounting sink.
-func (s *ElasticSink) Push(e bpf.Event) {
+// PushUpdate pushes an update event into the buffer of the ElasticSearch accounting sink.
+func (s *ElasticSink) PushUpdate(e bpf.Event) {
+	fmt.Println("ES received event:", e)
+}
+
+// PushDestroy pushes a destroy event into the buffer of the ElasticSearch accounting sink.
+func (s *ElasticSink) PushDestroy(e bpf.Event) {
 	fmt.Println("ES received event:", e)
 }
 
