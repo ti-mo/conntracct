@@ -1,6 +1,8 @@
 package influxdb
 
-import influx "github.com/influxdata/influxdb/client/v2"
+import (
+	influx "github.com/influxdata/influxdb/client/v2"
+)
 
 // newBatch allocates a new InfluxDB point batch to the sink structure.
 func (s *InfluxSink) newBatch() {
@@ -46,6 +48,8 @@ func (s *InfluxSink) flushBatch() {
 	// Non-blocking send on sendChan.
 	select {
 	case s.sendChan <- s.batch:
+		s.stats.IncrBatchesQueued()
+		s.stats.SetBatchQueueLength(len(s.sendChan))
 	default:
 		// Log a dropped batch if no receiver is ready.
 		s.stats.IncrBatchDropped()

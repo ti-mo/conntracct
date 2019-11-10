@@ -14,6 +14,9 @@ func (s *InfluxSink) sendWorker() {
 
 		b := <-s.sendChan
 
+		// Store the size of the send queue.
+		s.stats.SetBatchQueueLength(len(s.sendChan))
+
 		// Write the batch
 		if err := s.client.Write(b); err != nil {
 			log.Errorf("InfluxDB sink '%s': Error writing batch: %s. Batch dropped.", s.config.Name, err)

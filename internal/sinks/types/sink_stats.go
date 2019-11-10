@@ -19,6 +19,12 @@ type SinkStats struct {
 
 	// Current batch length of the sink.
 	BatchLength uint64 `json:"batch_length"`
+
+	// Amount of batches queued to be sent over the network.
+	BatchesQueued uint64 `json:"batches_queued"`
+	// Length of the network send queue.
+	BatchQueueLength uint64 `json:"batch_queue_length"`
+
 	// Amount of batches sent.
 	BatchesSent uint64 `json:"batches_sent"`
 	// Amount of batches failed to be sent.
@@ -50,6 +56,16 @@ func (s *SinkStats) SetBatchLength(l int) {
 	atomic.StoreUint64(&s.BatchLength, uint64(l))
 }
 
+// IncrBatchesQueued atomically increases the sink's batches queued counter by one.
+func (s *SinkStats) IncrBatchesQueued() {
+	atomic.AddUint64(&s.BatchesQueued, 1)
+}
+
+// SetBatchQueueLength sets the length of the batch send queue.
+func (s *SinkStats) SetBatchQueueLength(l int) {
+	atomic.StoreUint64(&s.BatchQueueLength, uint64(l))
+}
+
 // IncrBatchDropped atomically increases the sink's dropped batch counter by one.
 func (s *SinkStats) IncrBatchDropped() {
 	atomic.AddUint64(&s.BatchesDropped, 1)
@@ -70,6 +86,8 @@ func (s *SinkStats) Get() SinkStats {
 		UpdateEventsDropped:  atomic.LoadUint64(&s.UpdateEventsDropped),
 		DestroyEventsDropped: atomic.LoadUint64(&s.DestroyEventsDropped),
 		BatchLength:          atomic.LoadUint64(&s.BatchLength),
+		BatchesQueued:        atomic.LoadUint64(&s.BatchesQueued),
+		BatchQueueLength:     atomic.LoadUint64(&s.BatchQueueLength),
 		BatchesSent:          atomic.LoadUint64(&s.BatchesSent),
 		BatchesDropped:       atomic.LoadUint64(&s.BatchesDropped),
 	}
