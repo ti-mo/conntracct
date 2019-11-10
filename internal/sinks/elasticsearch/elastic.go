@@ -1,8 +1,8 @@
 package elasticsearch
 
 import (
-	"fmt"
 	"strings"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 
@@ -25,6 +25,13 @@ type ElasticSink struct {
 	// elastic driver client handle.
 	client *es7.Client
 
+	// Channel the send workers receive batches on.
+	sendChan chan batch
+
+	// Data point batch.
+	batchMu sync.Mutex
+	batch   batch
+
 	// Sink stats.
 	stats types.SinkStats
 }
@@ -42,6 +49,9 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 	}
 	if sc.Address == "" {
 		sc.Address = "http://localhost:9200"
+	}
+	if sc.BatchSize == 0 {
+		sc.BatchSize = 2048
 	}
 
 	ec := es7.Config{
@@ -70,15 +80,15 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 		return err
 	}
 
-	log.WithField("sink", sc.Name).Debugf("Connected to ElasticSearch cluster '%s' version %s with ES client version %s",
-		info.ClusterName, info.ServerVersion, info.ClientVersion)
-
-	// Create index mapping.
+	log.WithField("sink", sc.Name).
+		Debugf("Connected to ElasticSearch cluster '%s' version %s using client version %s",
+			info.ClusterName, info.ServerVersion, info.ClientVersion)
 
 	s.config = sc
 	s.client = client
 
 	// Start workers.
+	s.sendChan = make(chan batch, 64)
 
 	// Mark the sink as initialized.
 	s.init = true
@@ -88,12 +98,24 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 
 // PushUpdate pushes an update event into the buffer of the ElasticSearch accounting sink.
 func (s *ElasticSink) PushUpdate(e bpf.Event) {
-	fmt.Println("ES received event:", e)
+	// Wrap the BPF event in a structure to be inserted into the database.
+	ee := event{
+		Data:      &e,
+		EventType: "update",
+	}
+
+	s.addBatchEvent(&ee)
 }
 
 // PushDestroy pushes a destroy event into the buffer of the ElasticSearch accounting sink.
 func (s *ElasticSink) PushDestroy(e bpf.Event) {
-	fmt.Println("ES received event:", e)
+	// Wrap the BPF event in a structure to be inserted into the database.
+	ee := event{
+		Data:      &e,
+		EventType: "destroy",
+	}
+
+	s.addBatchEvent(&ee)
 }
 
 // IsInit returns true if the ElasticSearch accounting sink was successfully initialized.
@@ -111,14 +133,16 @@ func (s *ElasticSink) Stats() types.SinkStats {
 	return s.stats.Get()
 }
 
-// WantUpdate always returns false, it is not interested in update events.
+// WantUpdate returns true if the elastic sink is configured to accept update events.
+// TODO(timo): Add this to SinkConfig.
 func (s *ElasticSink) WantUpdate() bool {
-	return false
+	return true
 }
 
-// WantDestroy always returns true, it is only interested in destroy events.
+// WantDestroy returns true if the elastic sink is configured to accept update events.
+// TODO(timo): Add this to SinkConfig.
 func (s *ElasticSink) WantDestroy() bool {
 	return true
 }
 
-// TODO(timo): Install index mapping before rollover at midnight.
+// TODO(timo): Create index mapping and roll over at midnight.
