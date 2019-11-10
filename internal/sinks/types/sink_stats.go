@@ -29,6 +29,8 @@ type SinkStats struct {
 	BatchesSent uint64 `json:"batches_sent"`
 	// Amount of batches failed to be sent.
 	BatchesDropped uint64 `json:"batches_dropped"`
+	// Amount of events that failed to be accepted by the remote.
+	BatchEventsFailed uint64 `json:"batch_events_failed"`
 }
 
 // IncrUpdateEventsPushed atomically increases the sink's update event counter by one.
@@ -76,6 +78,11 @@ func (s *SinkStats) IncrBatchSent() {
 	atomic.AddUint64(&s.BatchesSent, 1)
 }
 
+// IncrBatchEventsFailed atomically increases the sink's failed batch events counter by one.
+func (s *SinkStats) IncrBatchEventsFailed() {
+	atomic.AddUint64(&s.BatchEventsFailed, 1)
+}
+
 // Get returns a copy of the SinkStats structure created using atomic loads.
 // The values can be inconsistent with each other, as they are written and
 // read concurrently without locks.
@@ -90,5 +97,6 @@ func (s *SinkStats) Get() SinkStats {
 		BatchQueueLength:     atomic.LoadUint64(&s.BatchQueueLength),
 		BatchesSent:          atomic.LoadUint64(&s.BatchesSent),
 		BatchesDropped:       atomic.LoadUint64(&s.BatchesDropped),
+		BatchEventsFailed:    atomic.LoadUint64(&s.BatchEventsFailed),
 	}
 }
