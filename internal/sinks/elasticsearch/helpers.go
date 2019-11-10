@@ -1,40 +1,31 @@
 package elasticsearch
 
 import (
-	"encoding/json"
-	"fmt"
+	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/ti-mo/conntracct/internal/sinks/types"
 
-	es7 "github.com/elastic/go-elasticsearch/v7"
-	"github.com/elastic/go-elasticsearch/v7/esapi"
+	elastic "github.com/olivere/elastic/v7"
+	log "github.com/sirupsen/logrus"
 )
 
-// clusterInfo holds information about an ElasticSearch cluster.
-type clusterInfo struct {
-	ClusterName   string
-	ServerVersion string
-	ClientVersion string
-}
+func configureElastic(sc types.SinkConfig) []elastic.ClientOptionFunc {
 
-// parseInfo parses an *esapi.Response and returns a clusterInfo.
-func parseInfo(res *esapi.Response) (*clusterInfo, error) {
-
-	// Check response status.
-	if res.IsError() {
-		return nil, fmt.Errorf("error getting cluster info: %s", res)
+	// Initialize opts with a list of cluster addresses.
+	opts := []elastic.ClientOptionFunc{
+		elastic.SetURL(strings.Split(sc.Address, ",")...),
+		// Disable node discovery by default, this interferes with
+		// connecting to ES clusters over the internet.
+		elastic.SetSniff(false),
 	}
 
-	// Deserialize the response into a map.
-	var r map[string]interface{}
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
-		return nil, errors.Wrap(err, "error parsing info response body")
+	log.WithField("sink", sc.Name).Debugf("Using elasticsearch at address '%s'", sc.Address)
+
+	// Set up basic authentication if configured.
+	if sc.Username != "" && sc.Password != "" {
+		opts = append(opts, elastic.SetBasicAuth(sc.Username, sc.Password))
+		log.WithField("sink", sc.Name).Debug("Configured elasticsearch client with basic authentication")
 	}
 
-	// Print client and server version numbers.
-	return &clusterInfo{
-		ClusterName:   r["cluster_name"].(string),
-		ServerVersion: r["version"].(map[string]interface{})["number"].(string),
-		ClientVersion: es7.Version,
-	}, nil
+	return opts
 }

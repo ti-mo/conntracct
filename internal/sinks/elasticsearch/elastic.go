@@ -1,12 +1,12 @@
 package elasticsearch
 
 import (
+	"context"
 	"strings"
 	"sync"
 
+	elastic "github.com/olivere/elastic/v7"
 	log "github.com/sirupsen/logrus"
-
-	es7 "github.com/elastic/go-elasticsearch/v7"
 
 	"github.com/ti-mo/conntracct/internal/sinks/types"
 	"github.com/ti-mo/conntracct/pkg/bpf"
@@ -23,7 +23,7 @@ type ElasticSink struct {
 	config types.SinkConfig
 
 	// elastic driver client handle.
-	client *es7.Client
+	client *elastic.Client
 
 	// Channel the send workers receive batches on.
 	sendChan chan batch
@@ -54,41 +54,33 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 		sc.BatchSize = 2048
 	}
 
-	ec := es7.Config{
-		Addresses: strings.Split(sc.Address, ","),
-		Username:  sc.Username,
-		Password:  sc.Password,
-		CloudID:   sc.CloudID,
-		APIKey:    sc.APIKey,
-	}
+	opts := configureElastic(sc)
 
-	// Try to open a connection to the database with the latest ES client.
-	client, err := es7.NewClient(ec)
+	// Create a database client.
+	client, err := elastic.NewClient(opts...)
 	if err != nil {
 		return err
 	}
 
 	// Obtain information about the cluster.
-	ir, err := client.Info()
-	if err != nil {
-		return err
-	}
-
-	// Check and parse cluster info response.
-	info, err := parseInfo(ir)
+	ping, _, err := client.Ping(strings.Split(sc.Address, ",")[0]).Do(context.Background())
 	if err != nil {
 		return err
 	}
 
 	log.WithField("sink", sc.Name).
-		Debugf("Connected to ElasticSearch cluster '%s' version %s using client version %s",
-			info.ClusterName, info.ServerVersion, info.ClientVersion)
+		Debugf("Connected to elasticsearch cluster '%s' version %s using client version %s",
+			ping.ClusterName, ping.Version.Number, elastic.Version)
 
 	s.config = sc
 	s.client = client
 
 	// Start workers.
 	s.sendChan = make(chan batch, 64)
+	s.newBatch() // initial empty batch
+
+	go s.sendWorker()
+	go s.tickWorker()
 
 	// Mark the sink as initialized.
 	s.init = true
