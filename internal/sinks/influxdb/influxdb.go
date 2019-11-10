@@ -184,21 +184,7 @@ func (s *InfluxSink) push(e bpf.Event) {
 	}
 
 	// Add the point to the batch.
-	s.batchMu.Lock()
-	s.batch.AddPoint(pt)
-
-	batchLen := len(s.batch.Points())
-
-	// Record statistics.
-	s.stats.SetBatchLength(batchLen)
-
-	// Flush the batch when the watermark is reached.
-	if batchLen >= int(s.config.BatchSize) {
-		s.sendChan <- s.batch
-		s.newBatch()
-	}
-
-	s.batchMu.Unlock()
+	s.addBatchPoint(pt)
 }
 
 // Name gets the name of the InfluxDB accounting sink.
@@ -226,7 +212,7 @@ func (s *InfluxSink) Stats() types.SinkStats {
 	return s.stats.Get()
 }
 
-// newBatch writes a new InfluxDB client batch to the sink.
+// newBatch allocates a new InfluxDB point batch to the sink structure.
 func (s *InfluxSink) newBatch() {
 
 	b, err := influx.NewBatchPoints(influx.BatchPointsConfig{
@@ -240,4 +226,41 @@ func (s *InfluxSink) newBatch() {
 
 	s.batch = b
 	s.stats.SetBatchLength(0)
+}
+
+// addBatchPoint adds the given point to the current batch.
+// If the operation causes the batch watermark to be reached,
+// the batch is flushed. Do not call while holding batchMu.
+func (s *InfluxSink) addBatchPoint(pt *influx.Point) {
+
+	s.batchMu.Lock()
+
+	// Add the given point to the current batch.
+	s.batch.AddPoint(pt)
+
+	// Record the current batch length.
+	batchLen := len(s.batch.Points())
+	s.stats.SetBatchLength(batchLen)
+
+	// Flush the batch when the watermark is reached.
+	if batchLen >= int(s.config.BatchSize) {
+		s.flushBatch()
+	}
+
+	s.batchMu.Unlock()
+}
+
+// flushBatch flushes sends the current batch to the send worker
+// and allocates a new batch into the sink structure.
+func (s *InfluxSink) flushBatch() {
+	// Non-blocking send on sendChan.
+	select {
+	case s.sendChan <- s.batch:
+	default:
+		// Log a dropped batch if no receiver is ready.
+		s.stats.IncrBatchDropped()
+	}
+
+	// Allocate a new batch into the sink.
+	s.newBatch()
 }
