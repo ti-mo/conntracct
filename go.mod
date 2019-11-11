@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
+	github.com/gogo/protobuf v1.2.0 // indirect
 	github.com/gorilla/mux v1.7.0
 	github.com/influxdata/influxdb v1.7.4
 	github.com/influxdata/platform v0.0.0-20190117200541-d500d3cf5589 // indirect
@@ -14,6 +15,7 @@ require (
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/olivere/elastic/v7 v7.0.9
 	github.com/pkg/errors v0.8.1
+	github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829 // indirect
 	github.com/rakyll/statik v0.1.6
 	github.com/sirupsen/logrus v1.4.0
 	github.com/spf13/cobra v0.0.3
