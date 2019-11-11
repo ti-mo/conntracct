@@ -12,20 +12,20 @@ const EventLength = 104
 
 // Event is an accounting event delivered to userspace from the Probe.
 type Event struct {
-	Start        uint64 // epoch timestamp of flow start
-	Timestamp    uint64 // ktime timestamp of event
-	ConnectionID uint32
-	Connmark     uint32
-	SrcAddr      net.IP
-	DstAddr      net.IP
-	PacketsOrig  uint64
-	BytesOrig    uint64
-	PacketsRet   uint64
-	BytesRet     uint64
-	SrcPort      uint16
-	DstPort      uint16
-	NetNS        uint32
-	Proto        uint8
+	Start        uint64 `json:"start"`     // epoch timestamp of flow start
+	Timestamp    uint64 `json:"timestamp"` // ktime of event, relative to machine boot time
+	ConnectionID uint32 `json:"connection_id"`
+	Connmark     uint32 `json:"connmark"`
+	SrcAddr      net.IP `json:"src_addr"`
+	DstAddr      net.IP `json:"dest_addr"`
+	PacketsOrig  uint64 `json:"packets_orig"`
+	BytesOrig    uint64 `json:"bytes_orig"`
+	PacketsRet   uint64 `json:"packets_ret"`
+	BytesRet     uint64 `json:"bytes_ret"`
+	SrcPort      uint16 `json:"src_port"`
+	DstPort      uint16 `json:"dst_port"`
+	NetNS        uint32 `json:"netns"`
+	Proto        uint8  `json:"proto"`
 }
 
 // UnmarshalBinary unmarshals a binary Event representation
