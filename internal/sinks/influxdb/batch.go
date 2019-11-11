@@ -45,6 +45,12 @@ func (s *InfluxSink) addBatchPoint(pt *influx.Point) {
 // flushBatch sends the current batch to the send worker
 // and allocates a new batch into the sink structure.
 func (s *InfluxSink) flushBatch() {
+
+	// Don't take action if the batch is empty.
+	if len(s.batch.Points()) == 0 {
+		return
+	}
+
 	// Non-blocking send on sendChan.
 	select {
 	case s.sendChan <- s.batch:

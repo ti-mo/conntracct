@@ -41,12 +41,7 @@ func (s *InfluxSink) tickWorker() {
 		<-t.C
 
 		s.batchMu.Lock()
-
-		// Only flush the batch when it contains points.
-		if len(s.batch.Points()) != 0 {
-			s.flushBatch()
-		}
-
+		s.flushBatch()
 		s.batchMu.Unlock()
 	}
 }
