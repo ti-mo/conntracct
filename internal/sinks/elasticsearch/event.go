@@ -6,9 +6,13 @@ import "github.com/ti-mo/conntracct/pkg/bpf"
 // This structure is used to generate the JSON document
 // sent to elasticsearch.
 type event struct {
-	// Data of the event.
-	Data *bpf.Event `json:"data"`
-
 	// Type of event, eg. 'update' or 'destroy'.
 	EventType string `json:"event_type"`
+
+	// Hostname of the machine sending the event.
+	Hostname string `json:"hostname"`
+
+	// Embedded Event struct, to be included on
+	// the root level of the marshaled json.
+	*bpf.Event
 }

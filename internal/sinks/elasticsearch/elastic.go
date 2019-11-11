@@ -2,8 +2,10 @@ package elasticsearch
 
 import (
 	"context"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	elastic "github.com/olivere/elastic/v7"
 	log "github.com/sirupsen/logrus"
@@ -50,6 +52,9 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 	if sc.Address == "" {
 		sc.Address = "http://localhost:9200"
 	}
+	if sc.Database == "" {
+		sc.Database = "conntracct"
+	}
 	if sc.BatchSize == 0 {
 		sc.BatchSize = 2048
 	}
@@ -80,7 +85,7 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 	s.newBatch() // initial empty batch
 
 	go s.sendWorker()
-	go s.tickWorker()
+	go s.tickWorker(time.Second * 5)
 
 	// Mark the sink as initialized.
 	s.init = true
@@ -90,10 +95,16 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 
 // PushUpdate pushes an update event into the buffer of the ElasticSearch accounting sink.
 func (s *ElasticSink) PushUpdate(e bpf.Event) {
+
+	// Get the machine's current hostname.
+	// TODO(timo): Allow the user to override the hostname.
+	h, _ := os.Hostname()
+
 	// Wrap the BPF event in a structure to be inserted into the database.
 	ee := event{
-		Data:      &e,
 		EventType: "update",
+		Hostname:  h,
+		Event:     &e,
 	}
 
 	s.addBatchEvent(&ee)
@@ -101,10 +112,16 @@ func (s *ElasticSink) PushUpdate(e bpf.Event) {
 
 // PushDestroy pushes a destroy event into the buffer of the ElasticSearch accounting sink.
 func (s *ElasticSink) PushDestroy(e bpf.Event) {
+
+	// Get the machine's current hostname.
+	// TODO(timo): Allow the user to override the hostname.
+	h, _ := os.Hostname()
+
 	// Wrap the BPF event in a structure to be inserted into the database.
 	ee := event{
-		Data:      &e,
 		EventType: "destroy",
+		Hostname:  h,
+		Event:     &e,
 	}
 
 	s.addBatchEvent(&ee)
