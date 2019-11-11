@@ -17,7 +17,7 @@ type Event struct {
 	ConnectionID uint32 `json:"connection_id"`
 	Connmark     uint32 `json:"connmark"`
 	SrcAddr      net.IP `json:"src_addr"`
-	DstAddr      net.IP `json:"dest_addr"`
+	DstAddr      net.IP `json:"dst_addr"`
 	PacketsOrig  uint64 `json:"packets_orig"`
 	BytesOrig    uint64 `json:"bytes_orig"`
 	PacketsRet   uint64 `json:"packets_ret"`
