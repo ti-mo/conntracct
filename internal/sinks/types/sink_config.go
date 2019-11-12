@@ -35,8 +35,14 @@ type SinkConfig struct {
 	// Password of the sink's backing storage.
 	Password string `mapstructure:"password"`
 
-	// Database name of the sink's backing storage.
+	// Database or index name of the sink's backing storage.
 	Database string `mapstructure:"database"`
+
+	// Shard count of the sink's database. (elastic)
+	Shards uint16 `mapstructure:"shards"`
+
+	// Replica count of the sink's database. (elastic)
+	Replicas uint16 `mapstructure:"replicas"`
 
 	// Write timeout of the sink's backing storage.
 	Timeout time.Duration `mapstructure:"timeout"`

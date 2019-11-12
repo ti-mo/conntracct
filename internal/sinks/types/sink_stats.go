@@ -7,32 +7,65 @@ import "sync/atomic"
 // Load*() methods to read values from the structure. The Get() convenience
 // method returns a new instance of itself using atomic loads.
 type SinkStats struct {
-	// Amount of events Push()ed into the sink.
-	EventsPushed uint64 `json:"events_pushed"`
-	// Amount of events failed to be Push()ed into the sink.
-	EventsDropped uint64 `json:"events_dropped"`
+	// Amount of update events pushed into the sink.
+	UpdateEventsPushed uint64 `json:"update_events_pushed"`
+	// Amount of destroy events pushed into the sink.
+	DestroyEventsPushed uint64 `json:"destroy_events_pushed"`
+
+	// Amount of update events failed to be pushed into the sink.
+	UpdateEventsDropped uint64 `json:"update_events_dropped"`
+	// Amount of destroy events failed to be pushed into the sink.
+	DestroyEventsDropped uint64 `json:"destroy_events_dropped"`
 
 	// Current batch length of the sink.
 	BatchLength uint64 `json:"batch_length"`
+
+	// Amount of batches queued to be sent over the network.
+	BatchesQueued uint64 `json:"batches_queued"`
+	// Length of the network send queue.
+	BatchQueueLength uint64 `json:"batch_queue_length"`
+
 	// Amount of batches sent.
 	BatchesSent uint64 `json:"batches_sent"`
 	// Amount of batches failed to be sent.
 	BatchesDropped uint64 `json:"batches_dropped"`
+	// Amount of events that failed to be accepted by the remote.
+	BatchEventsFailed uint64 `json:"batch_events_failed"`
 }
 
-// IncrEventsPushed atomically increases the sink's event counter by one.
-func (s *SinkStats) IncrEventsPushed() {
-	atomic.AddUint64(&s.EventsPushed, 1)
+// IncrUpdateEventsPushed atomically increases the sink's update event counter by one.
+func (s *SinkStats) IncrUpdateEventsPushed() {
+	atomic.AddUint64(&s.UpdateEventsPushed, 1)
 }
 
-// IncrEventsDropped atomically increases the sink's dropped event counter by one.
-func (s *SinkStats) IncrEventsDropped() {
-	atomic.AddUint64(&s.EventsDropped, 1)
+// IncrDestroyEventsPushed atomically increases the sink's destroy event counter by one.
+func (s *SinkStats) IncrDestroyEventsPushed() {
+	atomic.AddUint64(&s.DestroyEventsPushed, 1)
+}
+
+// IncrUpdateEventsDropped atomically increases the sink's dropped update event counter by one.
+func (s *SinkStats) IncrUpdateEventsDropped() {
+	atomic.AddUint64(&s.UpdateEventsDropped, 1)
+}
+
+// IncrDestroyEventsDropped atomically increases the sink's dropped destroy event counter by one.
+func (s *SinkStats) IncrDestroyEventsDropped() {
+	atomic.AddUint64(&s.DestroyEventsDropped, 1)
 }
 
 // SetBatchLength sets the length of the current batch.
 func (s *SinkStats) SetBatchLength(l int) {
 	atomic.StoreUint64(&s.BatchLength, uint64(l))
+}
+
+// IncrBatchesQueued atomically increases the sink's batches queued counter by one.
+func (s *SinkStats) IncrBatchesQueued() {
+	atomic.AddUint64(&s.BatchesQueued, 1)
+}
+
+// SetBatchQueueLength sets the length of the batch send queue.
+func (s *SinkStats) SetBatchQueueLength(l int) {
+	atomic.StoreUint64(&s.BatchQueueLength, uint64(l))
 }
 
 // IncrBatchDropped atomically increases the sink's dropped batch counter by one.
@@ -45,15 +78,25 @@ func (s *SinkStats) IncrBatchSent() {
 	atomic.AddUint64(&s.BatchesSent, 1)
 }
 
+// IncrBatchEventsFailed atomically increases the sink's failed batch events counter by one.
+func (s *SinkStats) IncrBatchEventsFailed() {
+	atomic.AddUint64(&s.BatchEventsFailed, 1)
+}
+
 // Get returns a copy of the SinkStats structure created using atomic loads.
 // The values can be inconsistent with each other, as they are written and
 // read concurrently without locks.
 func (s *SinkStats) Get() SinkStats {
 	return SinkStats{
-		EventsPushed:   atomic.LoadUint64(&s.EventsPushed),
-		EventsDropped:  atomic.LoadUint64(&s.EventsDropped),
-		BatchLength:    atomic.LoadUint64(&s.BatchLength),
-		BatchesSent:    atomic.LoadUint64(&s.BatchesSent),
-		BatchesDropped: atomic.LoadUint64(&s.BatchesDropped),
+		UpdateEventsPushed:   atomic.LoadUint64(&s.UpdateEventsPushed),
+		DestroyEventsPushed:  atomic.LoadUint64(&s.DestroyEventsPushed),
+		UpdateEventsDropped:  atomic.LoadUint64(&s.UpdateEventsDropped),
+		DestroyEventsDropped: atomic.LoadUint64(&s.DestroyEventsDropped),
+		BatchLength:          atomic.LoadUint64(&s.BatchLength),
+		BatchesQueued:        atomic.LoadUint64(&s.BatchesQueued),
+		BatchQueueLength:     atomic.LoadUint64(&s.BatchQueueLength),
+		BatchesSent:          atomic.LoadUint64(&s.BatchesSent),
+		BatchesDropped:       atomic.LoadUint64(&s.BatchesDropped),
+		BatchEventsFailed:    atomic.LoadUint64(&s.BatchEventsFailed),
 	}
 }

@@ -14,16 +14,19 @@ func (s *InfluxSink) sendWorker() {
 
 		b := <-s.sendChan
 
+		// Store the size of the send queue.
+		s.stats.SetBatchQueueLength(len(s.sendChan))
+
 		// Write the batch
 		if err := s.client.Write(b); err != nil {
 			log.Errorf("InfluxDB sink '%s': Error writing batch: %s. Batch dropped.", s.config.Name, err)
 
-			// Increase dropped batch counter
+			// Increase dropped batch counter.
 			s.stats.IncrBatchDropped()
 			continue
 		}
 
-		// Increase sent batch counter
+		// Increase sent batch counter.
 		s.stats.IncrBatchSent()
 	}
 }
@@ -38,12 +41,7 @@ func (s *InfluxSink) tickWorker() {
 		<-t.C
 
 		s.batchMu.Lock()
-
-		if len(s.batch.Points()) != 0 {
-			s.sendChan <- s.batch
-			s.newBatch()
-		}
-
+		s.flushBatch()
 		s.batchMu.Unlock()
 	}
 }

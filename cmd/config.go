@@ -4,7 +4,9 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+
 	"github.com/ti-mo/conntracct/internal/pipeline"
 	"github.com/ti-mo/conntracct/internal/sinks"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
@@ -80,11 +82,13 @@ func initRegisterSinks(cl []types.SinkConfig, pipe *pipeline.Pipeline) error {
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("creating sink '%s'", cfg.Name))
 		}
+		log.Debugf("Created %s sink '%s'", cfg.Type, cfg.Name)
 
 		// Register created sink with pipeline.
 		if err := pipe.RegisterSink(sink); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("registering sink '%s' to pipeline", cfg.Name))
 		}
+		log.Debugf("Registered %s sink '%s' to pipeline", cfg.Type, cfg.Name)
 	}
 
 	return nil

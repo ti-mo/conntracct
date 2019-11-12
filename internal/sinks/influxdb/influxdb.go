@@ -103,6 +103,7 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 		}
 
 		// Ensure the database with the given name is created.
+		// Does not return an error if the database already exists.
 		q := influx.NewQuery("CREATE DATABASE "+sc.Database, "", "")
 		if r, err := c.Query(q); err != nil {
 			return err
@@ -132,9 +133,19 @@ func (s *InfluxSink) Init(sc types.SinkConfig) error {
 	return nil
 }
 
-// Push an accounting event into the buffer of the InfluxDB accounting sink.
-// Adds data points to the InfluxDB client buffer in a thread-safe manner.
-func (s *InfluxSink) Push(e bpf.Event) {
+// PushUpdate pushes an update event into the buffer of the InfluxDB accounting sink.
+func (s *InfluxSink) PushUpdate(e bpf.Event) {
+	s.push(e)
+	s.stats.IncrUpdateEventsPushed()
+}
+
+// PushDestroy pushes a destroy event into the buffer of the InfluxDB accounting sink.
+func (s *InfluxSink) PushDestroy(e bpf.Event) {
+	s.push(e)
+	s.stats.IncrDestroyEventsPushed()
+}
+
+func (s *InfluxSink) push(e bpf.Event) {
 
 	// Create a point and add to batch.
 	tags := map[string]string{
@@ -173,22 +184,7 @@ func (s *InfluxSink) Push(e bpf.Event) {
 	}
 
 	// Add the point to the batch.
-	s.batchMu.Lock()
-	s.batch.AddPoint(pt)
-
-	batchLen := len(s.batch.Points())
-
-	// Record statistics.
-	s.stats.SetBatchLength(batchLen)
-	s.stats.IncrEventsPushed()
-
-	// Flush the batch when the watermark is reached.
-	if batchLen >= int(s.config.BatchSize) {
-		s.sendChan <- s.batch
-		s.newBatch()
-	}
-
-	s.batchMu.Unlock()
+	s.addBatchPoint(pt)
 }
 
 // Name gets the name of the InfluxDB accounting sink.
@@ -196,7 +192,7 @@ func (s *InfluxSink) Name() string {
 	return s.config.Name
 }
 
-// IsInit checks if the InfluxDB accounting sink was successfully initialized.
+// IsInit returns true if the InfluxDB accounting sink was successfully initialized.
 func (s *InfluxSink) IsInit() bool {
 	return s.init
 }
@@ -214,20 +210,4 @@ func (s *InfluxSink) WantDestroy() bool {
 // Stats returns the InfluxDB accounting sink's statistics structure.
 func (s *InfluxSink) Stats() types.SinkStats {
 	return s.stats.Get()
-}
-
-// newBatch writes a new InfluxDB client batch to the sink.
-func (s *InfluxSink) newBatch() {
-
-	b, err := influx.NewBatchPoints(influx.BatchPointsConfig{
-		Precision: "ns", // nanosecond precision timestamps
-		Database:  s.config.Database,
-	})
-
-	if err != nil {
-		panic(err)
-	}
-
-	s.batch = b
-	s.stats.SetBatchLength(0)
 }

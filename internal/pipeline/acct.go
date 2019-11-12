@@ -119,7 +119,7 @@ func (p *Pipeline) acctUpdateWorker() {
 		p.acctSinkMu.RLock()
 		for _, s := range p.acctSinks {
 			if s.WantUpdate() {
-				s.Push(ae)
+				s.PushUpdate(ae)
 			}
 		}
 		p.acctSinkMu.RUnlock()
@@ -145,7 +145,7 @@ func (p *Pipeline) acctDestroyWorker() {
 		p.acctSinkMu.RLock()
 		for _, s := range p.acctSinks {
 			if s.WantDestroy() {
-				s.Push(ae)
+				s.PushDestroy(ae)
 			}
 		}
 		p.acctSinkMu.RUnlock()

@@ -6,6 +6,7 @@ import (
 	"github.com/ti-mo/conntracct/pkg/bpf"
 
 	"github.com/ti-mo/conntracct/internal/sinks/dummy"
+	"github.com/ti-mo/conntracct/internal/sinks/elasticsearch"
 	"github.com/ti-mo/conntracct/internal/sinks/influxdb"
 	"github.com/ti-mo/conntracct/internal/sinks/stdout"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
@@ -24,13 +25,15 @@ type Sink interface {
 	// Get the sink's name.
 	Name() string
 
-	// Check which kind of events this sink is interested in.
+	// Returns true if the sink wants to receive update events.
 	WantUpdate() bool
+	// Returns true if the sink wants to receive destroy events.
 	WantDestroy() bool
 
-	// Enqueue an accounting event to the sink driver.
-	// Implementation MUST be thread-safe.
-	Push(bpf.Event)
+	// Push an update event to the sink driver. Implementation must be thread-safe.
+	PushUpdate(bpf.Event)
+	// Push a destroy event to the sink driver. Implementation must be thread-safe.
+	PushDestroy(bpf.Event)
 
 	// Get a snapshot copy of the sink's performance statistics.
 	Stats() types.SinkStats
@@ -50,6 +53,12 @@ func New(cfg types.SinkConfig) (Sink, error) {
 			return nil, err
 		}
 		sink = &idb
+	case types.Elastic:
+		es := elasticsearch.New()
+		if err := es.Init(cfg); err != nil {
+			return nil, err
+		}
+		sink = &es
 	// stdout driver can write to either stdout or stderr.
 	case types.StdOut, types.StdErr:
 		std := stdout.New()

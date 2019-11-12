@@ -29,10 +29,16 @@ func (d *Dummy) Init(sc types.SinkConfig) error {
 	return nil
 }
 
-// Push sends an event into the abyss.
-func (d *Dummy) Push(e bpf.Event) {
-	d.stats.IncrEventsPushed()
-	d.stats.IncrBatchDropped()
+// PushUpdate sends an update event into the abyss.
+func (d *Dummy) PushUpdate(e bpf.Event) {
+	d.stats.IncrUpdateEventsPushed()
+	d.stats.IncrUpdateEventsDropped()
+}
+
+// PushDestroy sends a destroy event into the abyss.
+func (d *Dummy) PushDestroy(e bpf.Event) {
+	d.stats.IncrDestroyEventsPushed()
+	d.stats.IncrDestroyEventsDropped()
 }
 
 // Name gets the name of the Dummy.
