@@ -43,10 +43,11 @@ sinks:
   elastic:
     type: elastic
     address: "http://localhost:9200"  # comma-separated list of elasticsearch server URLs
+    # database: conntracct   # (default) index prefix (results in 'conntracct-YYYY.MM.DD')
+    # shards: 3              # (default) amount of shards to use for indices
+    # replicas: 0            # (default) amount of replicas to use for indices
     # username: my-username  # basic HTTP auth username
     # password: my-password  # basic HTTP auth password
-    # apikey: my-api-key     # XPack API key (https://www.elastic.co/guide/en/elasticsearch/reference/current/security-api-create-api-key.html)
-    # cloudid: 12345         # elasticsearch SaaS CloudID
 
   dummy:
     type: dummy
