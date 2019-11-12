@@ -168,10 +168,14 @@ func (s *InfluxSink) push(e bpf.Event) {
 	// though the current version (1.6) has this behind a build flag as it's not yet
 	// generally available. Only send signed ints for now until this is more widely deployed.
 	fields := map[string]interface{}{
-		"bytes_orig":   int64(e.BytesOrig),
-		"bytes_ret":    int64(e.BytesRet),
-		"packets_orig": int64(e.PacketsOrig),
-		"packets_ret":  int64(e.PacketsRet),
+		// Include conn_id in both fields and tags so it can be used in both aggregations and selections.
+		"conn_id":       strconv.FormatUint(uint64(e.ConnectionID), 10),
+		"bytes_orig":    int64(e.BytesOrig),
+		"bytes_ret":     int64(e.BytesRet),
+		"bytes_total":   int64(e.BytesOrig + e.BytesRet),
+		"packets_orig":  int64(e.PacketsOrig),
+		"packets_ret":   int64(e.PacketsRet),
+		"packets_total": int64(e.PacketsOrig + e.PacketsRet),
 	}
 
 	// To obtain the absolute time stamp of an event in kernel space,
