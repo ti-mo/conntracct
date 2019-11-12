@@ -9,7 +9,29 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func configureElastic(sc types.SinkConfig) []elastic.ClientOptionFunc {
+// sinkDefaults sets default values on a SinkConfig structure.
+func sinkDefaults(sc *types.SinkConfig) {
+
+	if sc.Address == "" {
+		sc.Address = "http://localhost:9200"
+	}
+
+	if sc.Database == "" {
+		sc.Database = "conntracct"
+	}
+
+	if sc.BatchSize == 0 {
+		sc.BatchSize = 2048
+	}
+
+	if sc.Shards == 0 {
+		sc.Shards = 3
+	}
+}
+
+// clientOptions extracts values from a SinkConfig to configure
+// an elastic client.
+func clientOptions(sc types.SinkConfig) []elastic.ClientOptionFunc {
 
 	// Initialize opts with a list of cluster addresses.
 	opts := []elastic.ClientOptionFunc{

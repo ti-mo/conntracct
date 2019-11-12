@@ -101,8 +101,10 @@ func (s *ElasticSink) sendBatch(b batch) {
 		for _, f := range failed {
 			// Increase the counter of events that failed to be indexed.
 			s.stats.IncrBatchEventsFailed()
-			log.WithField("sink", s.config.Name).WithField("type", f.Error.Type).
-				WithField("status", f.Status).Error("error indexing event: ", f.Error.Reason)
+			log.WithField("sink", s.config.Name).
+				WithField("type", f.Error.Type).WithField("status", f.Status).
+				WithField("reason", f.Error.Reason).WithField("cause", f.Error.CausedBy).
+				Error("error indexing event")
 		}
 	}
 }

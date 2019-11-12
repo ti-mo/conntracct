@@ -2,7 +2,6 @@ package elasticsearch
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/ti-mo/conntracct/internal/sinks/types"
+	"github.com/ti-mo/conntracct/pkg/boottime"
 	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
@@ -23,6 +23,9 @@ type ElasticSink struct {
 
 	// Sink's configuration object.
 	config types.SinkConfig
+
+	// Estimated boot time of the machine.
+	bootTime time.Time
 
 	// elastic driver client handle.
 	client *elastic.Client
@@ -49,20 +52,12 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 	if sc.Name == "" {
 		return errEmptySinkName
 	}
-	if sc.Address == "" {
-		sc.Address = "http://localhost:9200"
-	}
-	if sc.Database == "" {
-		sc.Database = "conntracct"
-	}
-	if sc.BatchSize == 0 {
-		sc.BatchSize = 2048
-	}
 
-	opts := configureElastic(sc)
+	// Configure default values on the sink configuration.
+	sinkDefaults(&sc)
 
 	// Create a database client.
-	client, err := elastic.NewClient(opts...)
+	client, err := elastic.NewClient(clientOptions(sc)...)
 	if err != nil {
 		return err
 	}
@@ -80,6 +75,18 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 	s.config = sc
 	s.client = client
 
+	// Estimate the machine's boot time, for absolute event timestamps.
+	// TODO(timo): Make this automatically refresh every x seconds.
+	s.bootTime = boottime.Estimate()
+
+	// Install index templates (mapping and shard/replica settings).
+	if err := s.installMappings(sc.Database); err != nil {
+		log.WithField("sink", sc.Name).Fatalf("error configuring index mappings: %s", err.Error())
+	}
+	if err := s.installSettings(sc.Database, sc.Shards, sc.Replicas); err != nil {
+		log.WithField("sink", sc.Name).Fatalf("error configuring index settings: %s", err.Error())
+	}
+
 	// Start workers.
 	s.sendChan = make(chan batch, 64)
 	s.newBatch() // initial empty batch
@@ -96,34 +103,26 @@ func (s *ElasticSink) Init(sc types.SinkConfig) error {
 // PushUpdate pushes an update event into the buffer of the ElasticSearch accounting sink.
 func (s *ElasticSink) PushUpdate(e bpf.Event) {
 
-	// Get the machine's current hostname.
-	// TODO(timo): Allow the user to override the hostname.
-	h, _ := os.Hostname()
-
 	// Wrap the BPF event in a structure to be inserted into the database.
 	ee := event{
 		EventType: "update",
-		Hostname:  h,
 		Event:     &e,
 	}
 
+	s.transformEvent(&ee)
 	s.addBatchEvent(&ee)
 }
 
 // PushDestroy pushes a destroy event into the buffer of the ElasticSearch accounting sink.
 func (s *ElasticSink) PushDestroy(e bpf.Event) {
 
-	// Get the machine's current hostname.
-	// TODO(timo): Allow the user to override the hostname.
-	h, _ := os.Hostname()
-
 	// Wrap the BPF event in a structure to be inserted into the database.
 	ee := event{
 		EventType: "destroy",
-		Hostname:  h,
 		Event:     &e,
 	}
 
+	s.transformEvent(&ee)
 	s.addBatchEvent(&ee)
 }
 
@@ -153,5 +152,3 @@ func (s *ElasticSink) WantUpdate() bool {
 func (s *ElasticSink) WantDestroy() bool {
 	return true
 }
-
-// TODO(timo): Create index mapping and roll over at midnight.
