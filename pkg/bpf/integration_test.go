@@ -3,7 +3,6 @@
 package bpf
 
 import (
-	"encoding/binary"
 	"log"
 	"net"
 	"os"
@@ -11,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jsimonetti/rtnetlink"
+	"github.com/jsimonetti/rtnetlink/rtnl"
 	"github.com/mdlayher/netlink"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
@@ -550,60 +549,21 @@ func setupNFTables(port uint16, ns netns.NsHandle) error {
 
 func setupInterface(ns netns.NsHandle) error {
 
-	// Gather the interface Index
+	// Gather the interface Index. This func runs on a goroutine
+	// that is already locked to a new netns.
 	iface, _ := net.InterfaceByName("lo")
-	// Get an ip address to add to the interface
-	addr, cidr, _ := net.ParseCIDR("127.0.0.1/8")
 
-	// Dial a connection to the rtnetlink socket.
-	cfg := netlink.Config{
-		NetNS: int(ns),
-	}
-	conn, err := rtnetlink.Dial(&cfg)
+	// Dial a connection to the rtnetlink socket. Specify the netns
+	// since netlink spawns a worker on/ a fresh OS thread. This thread
+	// needs to be moved into the netns.
+	conn, err := rtnl.Dial(&netlink.Config{NetNS: int(ns)})
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	// Test for the right cidress family for cidr
-	family := unix.AF_INET6
-	to4 := cidr.IP.To4()
-	if to4 != nil {
-		family = unix.AF_INET
-	}
-	// Calculate the prefix length
-	ones, _ := cidr.Mask.Size()
-
-	// Calculate the broadcast IP
-	// Only used when family is AF_INET
-	var brd net.IP
-	if to4 != nil {
-		brd = make(net.IP, len(to4))
-		binary.BigEndian.PutUint32(brd, binary.BigEndian.Uint32(to4)|^binary.BigEndian.Uint32(net.IP(cidr.Mask).To4()))
-	}
-
-	// Send the message using the rtnetlink.Conn
-	err = conn.Address.New(&rtnetlink.AddressMessage{
-		Family:       uint8(family),
-		PrefixLength: uint8(ones),
-		Scope:        unix.RT_SCOPE_UNIVERSE,
-		Index:        uint32(iface.Index),
-		Attributes: rtnetlink.AddressAttributes{
-			Address:   addr,
-			Local:     addr,
-			Broadcast: brd,
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	err = conn.Link.Set(&rtnetlink.LinkMessage{
-		Index:  uint32(iface.Index),
-		Flags:  unix.IFF_UP,
-		Change: unix.IFF_UP,
-	})
-	if err != nil {
+	// Bring up lo. Binds to 127.0.0.1 implicitly.
+	if err := conn.LinkUp(iface); err != nil {
 		return err
 	}
 
