@@ -28,7 +28,8 @@ import (
 
 // Mock UDP server listen port.
 const (
-	udpServ = 4444
+	udpServ  = 4444
+	bindAddr = "127.0.1.1"
 )
 
 var (
@@ -118,10 +119,10 @@ func prepareNetNS(port uint16) (*udpecho.MockUDP, int, func(), error) {
 	}
 
 	// Create UDP listener inside network namespace.
-	srv := udpecho.ListenAndEcho(port)
+	srv := udpecho.ListenAndEcho(bindAddr, port)
 
 	// Create UDP client inside network namespace.
-	client := udpecho.Dial(port)
+	client := udpecho.Dial(bindAddr, port)
 
 	// Closer function passed to the caller to conveniently
 	// close all resources.
@@ -321,8 +322,8 @@ func TestProbeVerify(t *testing.T) {
 	// Connection tuple
 	assert.EqualValues(t, udpServ, ev.DstPort, ev.String())
 	assert.EqualValues(t, mc.ClientPort(), ev.SrcPort, ev.String())
-	assert.EqualValues(t, net.IPv4(127, 0, 0, 1), ev.SrcAddr, ev.String())
-	assert.EqualValues(t, net.IPv4(127, 0, 0, 1), ev.DstAddr, ev.String())
+	assert.EqualValues(t, net.IPv4(127, 0, 1, 1), ev.SrcAddr, ev.String())
+	assert.EqualValues(t, net.IPv4(127, 0, 1, 1), ev.DstAddr, ev.String())
 	assert.EqualValues(t, 17, ev.Proto, ev.String())
 
 	// Wait for the first cooldown period to be over.
@@ -549,10 +550,6 @@ func setupNFTables(port uint16, ns netns.NsHandle) error {
 
 func setupInterface(ns netns.NsHandle) error {
 
-	// Gather the interface Index. This func runs on a goroutine
-	// that is already locked to a new netns.
-	iface, _ := net.InterfaceByName("lo")
-
 	// Dial a connection to the rtnetlink socket. Specify the netns
 	// since netlink spawns a worker on/ a fresh OS thread. This thread
 	// needs to be moved into the netns.
@@ -562,9 +559,21 @@ func setupInterface(ns netns.NsHandle) error {
 	}
 	defer conn.Close()
 
-	// Bring up lo. Binds to 127.0.0.1 implicitly.
-	if err := conn.LinkUp(iface); err != nil {
-		return err
+	// Get the interface Index. This func runs on a goroutine
+	// that is already locked to a new netns.
+	link, err := net.InterfaceByName("lo")
+	if err != nil {
+		return errors.Wrap(err, "getting 'lo' ifindex")
+	}
+
+	// Bring up the link.
+	if err := conn.LinkUp(link); err != nil {
+		return errors.Wrap(err, "setting up link 'lo'")
+	}
+
+	// Add the address to the link.
+	if err := conn.AddrAdd(link, rtnl.MustParseAddr(bindAddr+"/32")); err != nil {
+		return errors.Wrap(err, "adding address to 'lo'")
 	}
 
 	return err
