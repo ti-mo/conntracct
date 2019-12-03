@@ -3,24 +3,33 @@
 package bpf
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"os"
-	"syscall"
+	"runtime"
 	"testing"
 	"time"
 
+	"github.com/jsimonetti/rtnetlink/rtnl"
+	"github.com/mdlayher/netlink"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
+
+	"github.com/google/nftables"
+	"github.com/google/nftables/binaryutil"
+	"github.com/google/nftables/expr"
+	"github.com/vishvananda/netns"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/ti-mo/conntracct/pkg/udpecho"
-	"golang.org/x/sys/unix"
 )
 
 // Mock UDP server listen port.
 const (
-	udpServ = 1342
+	udpServ  = 4444
+	bindAddr = "127.0.1.1"
 )
 
 var (
@@ -47,12 +56,6 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	// Set the required sysctl's for the probe to gather accounting data.
-	err = Sysctls(false)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	// Create and start the Probe.
 	acctProbe, err = NewProbe(cfg)
 	if err != nil {
@@ -63,15 +66,13 @@ func TestMain(m *testing.M) {
 	}
 	go errWorker(acctProbe.ErrChan())
 
-	// Create and start the localhost UDP listener.
-	c := udpecho.ListenAndEcho(1342)
-
 	// Run tests, save the return code.
 	rc := m.Run()
 
 	// Tear down resources.
-	acctProbe.Stop()
-	c.Close()
+	if err := acctProbe.Stop(); err != nil {
+		log.Fatal(err)
+	}
 
 	os.Exit(rc)
 }
@@ -83,16 +84,18 @@ func TestProbeFirstPacket(t *testing.T) {
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
 
-	// Create UDP client.
-	mc := udpecho.Dial(udpServ)
+	// Set up a new network namespace to run tests.
+	mc, _, cfn, err := prepareNetNS(udpServ)
+	require.NoError(t, err, "preparing netns")
+	defer cfn()
 
 	// Filter BPF Events based on client port.
 	out := filterSourcePort(in, mc.ClientPort())
 
 	mc.Ping(1)
 	ev, err := readTimeout(out, 5)
-	assert.EqualValues(t, 1, ev.PacketsOrig+ev.PacketsRet, ev.String())
 	require.NoError(t, err)
+	assert.EqualValues(t, 1, ev.PacketsOrig+ev.PacketsRet, ev.String())
 
 	// Send another ping, and expect it to not be logged.
 	// Further attempt(s) to read from the channel should time out.
@@ -114,8 +117,10 @@ func TestProbeCurve(t *testing.T) {
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
 
-	// Create UDP client.
-	mc := udpecho.Dial(udpServ)
+	// Set up a new network namespace to run tests.
+	mc, _, cfn, err := prepareNetNS(udpServ)
+	require.NoError(t, err, "preparing netns")
+	defer cfn()
 
 	// Filter BPF Events based on client port.
 	out := filterSourcePort(in, mc.ClientPort())
@@ -124,8 +129,8 @@ func TestProbeCurve(t *testing.T) {
 	mc.Ping(1)
 	// expect the first packet to be logged,
 	ev, err := readTimeout(out, 5)
-	assert.EqualValues(t, 1, ev.PacketsOrig+ev.PacketsRet, ev.String())
 	require.NoError(t, err)
+	assert.EqualValues(t, 1, ev.PacketsOrig+ev.PacketsRet, ev.String())
 	// and the response to be dropped.
 	ev, err = readTimeout(out, 1)
 	// This also means events are drained.
@@ -226,8 +231,10 @@ func TestProbeVerify(t *testing.T) {
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
 
-	// Create UDP client.
-	mc := udpecho.Dial(udpServ)
+	// Set up a new network namespace to run tests.
+	mc, ns, cfn, err := prepareNetNS(udpServ)
+	require.NoError(t, err, "preparing netns")
+	defer cfn()
 
 	// Filter BPF Events based on client port.
 	out := filterSourcePort(in, mc.ClientPort())
@@ -237,9 +244,7 @@ func TestProbeVerify(t *testing.T) {
 	ev, err := readTimeout(out, 5)
 	require.NoError(t, err)
 
-	// Network Namespace
-	ns, err := getNSID()
-	require.NoError(t, err)
+	// Network namespace.
 	assert.EqualValues(t, ns, ev.NetNS, ev.String())
 
 	// Timestamp is always 0 on the first packet, since it passes
@@ -259,8 +264,8 @@ func TestProbeVerify(t *testing.T) {
 	// Connection tuple
 	assert.EqualValues(t, udpServ, ev.DstPort, ev.String())
 	assert.EqualValues(t, mc.ClientPort(), ev.SrcPort, ev.String())
-	assert.EqualValues(t, net.IPv4(127, 0, 0, 1), ev.SrcAddr, ev.String())
-	assert.EqualValues(t, net.IPv4(127, 0, 0, 1), ev.DstAddr, ev.String())
+	assert.EqualValues(t, net.IPv4(127, 0, 1, 1), ev.SrcAddr, ev.String())
+	assert.EqualValues(t, net.IPv4(127, 0, 1, 1), ev.DstAddr, ev.String())
 	assert.EqualValues(t, 17, ev.Proto, ev.String())
 
 	// Wait for the first cooldown period to be over.
@@ -336,18 +341,242 @@ func newUpdateConsumer(t *testing.T) (*Consumer, chan Event) {
 	return ac, c
 }
 
-// getNSID gets the inode of the current process' network namespace.
-func getNSID() (uint64, error) {
-	path := fmt.Sprintf("/proc/%d/task/%d/ns/net", os.Getpid(), syscall.Gettid())
-	fd, err := unix.Open(path, syscall.O_RDONLY, 0)
+// prepareNetNS creates a Conn in a new network namespace to use for testing.
+// Returns the UDP server and client, the netns identifier and error, if any.
+func prepareNetNS(port uint16) (*udpecho.MockUDP, int, func(), error) {
+
+	// Lock the current goroutine to the OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Get the current network namespace and
+	// return the thread to it before unlocking.
+	oldns, err := netns.Get()
 	if err != nil {
-		return 0, err
+		return nil, 0, nil, err
+	}
+	defer func() {
+		if err := netns.Set(oldns); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// Allocate new network namespace.
+	newns, err := netns.New()
+	if err != nil {
+		return nil, 0, nil, errors.Wrap(err, "creating network namespace")
 	}
 
-	var s unix.Stat_t
-	if err := unix.Fstat(fd, &s); err != nil {
-		return 0, err
+	// Set up network interfaces inside the new netns.
+	if err := setupInterface(newns); err != nil {
+		return nil, 0, nil, errors.Wrap(err, "setting up interfaces")
 	}
 
-	return s.Ino, nil
+	// Set up nftables rules inside network namespace.
+	if err := setupNFTables(port, newns); err != nil {
+		return nil, 0, nil, errors.Wrap(err, "setting up nftables")
+	}
+
+	// Set the required sysctl's for the probe to gather accounting data.
+	if err := Sysctls(false); err != nil {
+		return nil, 0, nil, errors.Wrap(err, "applying sysctl")
+	}
+
+	// Create UDP listener inside network namespace.
+	srv := udpecho.ListenAndEcho(bindAddr, port)
+
+	// Create UDP client inside network namespace.
+	client := udpecho.Dial(bindAddr, port)
+
+	// Closer function passed to the caller to conveniently
+	// close all resources.
+	closer := func() {
+		client.Close()
+		srv.Close()
+		newns.Close()
+	}
+
+	return &client, int(newns), closer, nil
+}
+
+type CTState int
+
+const (
+	IPCTEstablished CTState = iota // IP_CT_ESTABLISHED
+	_                              // IP_CT_RELATED
+	IPCTNew                        // IP_CT_NEW
+)
+
+// ctStateBit replicates the behaviour of the NF_CT_STATE_BIT kernel macro.
+func ctStateBit(state CTState) uint32 {
+	return 1 << (uint32(state) + 1)
+}
+
+func setupNFTables(port uint16, ns netns.NsHandle) error {
+
+	nftc := nftables.Conn{
+		NetNS: int(ns),
+	}
+
+	nftc.FlushRuleset()
+
+	table := &nftables.Table{
+		Name:   "conntracct",
+		Family: nftables.TableFamily(unix.NFPROTO_INET),
+	}
+	nftc.AddTable(table)
+
+	policy := nftables.ChainPolicyDrop
+	chain := &nftables.Chain{
+		Name:     "ct_chain",
+		Table:    table,
+		Type:     nftables.ChainTypeFilter,
+		Hooknum:  nftables.ChainHookOutput,
+		Priority: nftables.ChainPriorityFilter,
+		Policy:   &policy,
+	}
+	nftc.AddChain(chain)
+
+	// Allow outgoing packets belonging to new and existing connections
+	// towards server port.
+	nftc.AddRule(&nftables.Rule{
+		Table: table,
+		Chain: chain,
+		Exprs: []expr.Any{
+
+			// UDP L4 Protocol
+			&expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1},
+			&expr.Cmp{
+				Op:       expr.CmpOpEq,
+				Register: 1,
+				Data:     []byte{unix.IPPROTO_UDP},
+			},
+
+			// UDP Destination Port
+			&expr.Payload{
+				Base:         expr.PayloadBaseTransportHeader,
+				Offset:       2, // destination port
+				Len:          2,
+				DestRegister: 1,
+			},
+			&expr.Cmp{
+				Op:       expr.CmpOpEq,
+				Register: 1,
+				Data:     binaryutil.BigEndian.PutUint16(port),
+			},
+
+			// New connections.
+			// By matching on a conntrack state somewhere in the chain, we enable connection
+			// tracking on all packets that are accepted somewhere in this chain.
+			&expr.Ct{
+				Key:      expr.CtKeySTATE,
+				Register: 1,
+			},
+			&expr.Bitwise{
+				SourceRegister: 1,
+				DestRegister:   1,
+				Len:            4,
+				Mask:           binaryutil.NativeEndian.PutUint32(ctStateBit(IPCTNew) | ctStateBit(IPCTEstablished)),
+				Xor:            []uint8{0x0, 0x0, 0x0, 0x0},
+			},
+			&expr.Cmp{
+				Register: 1,
+				Op:       expr.CmpOpNeq,
+				Data:     []uint8{0x0, 0x0, 0x0, 0x0},
+			},
+
+			&expr.Verdict{
+				Kind: expr.VerdictAccept,
+			},
+		},
+	})
+
+	// Allow outgoing return packets belonging to
+	// existing connections from server port.
+	nftc.AddRule(&nftables.Rule{
+		Table: table,
+		Chain: chain,
+		Exprs: []expr.Any{
+
+			// UDP L4 Protocol
+			&expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1},
+			&expr.Cmp{
+				Op:       expr.CmpOpEq,
+				Register: 1,
+				Data:     []byte{unix.IPPROTO_UDP},
+			},
+
+			// UDP Source Port
+			&expr.Payload{
+				Base:         expr.PayloadBaseTransportHeader,
+				Offset:       0, // source port
+				Len:          2,
+				DestRegister: 1,
+			},
+			&expr.Cmp{
+				Op:       expr.CmpOpEq,
+				Register: 1,
+				Data:     binaryutil.BigEndian.PutUint16(port),
+			},
+
+			// Established connections.
+			&expr.Ct{
+				Key:      expr.CtKeySTATE,
+				Register: 1,
+			},
+			&expr.Bitwise{
+				SourceRegister: 1,
+				DestRegister:   1,
+				Len:            4,
+				Mask:           binaryutil.NativeEndian.PutUint32(ctStateBit(IPCTEstablished)),
+				Xor:            []uint8{0x0, 0x0, 0x0, 0x0},
+			},
+			&expr.Cmp{
+				Register: 1,
+				Op:       expr.CmpOpNeq,
+				Data:     []uint8{0x0, 0x0, 0x0, 0x0},
+			},
+
+			&expr.Verdict{
+				Kind: expr.VerdictAccept,
+			},
+		},
+	})
+
+	if err := nftc.Flush(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func setupInterface(ns netns.NsHandle) error {
+
+	// Dial a connection to the rtnetlink socket. Specify the netns
+	// since netlink spawns a worker on a fresh OS thread. This thread
+	// needs to be moved into the netns.
+	conn, err := rtnl.Dial(&netlink.Config{NetNS: int(ns)})
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// Get the interface Index. This func runs on a goroutine
+	// that is already locked to a new netns.
+	link, err := net.InterfaceByName("lo")
+	if err != nil {
+		return errors.Wrap(err, "getting 'lo' ifindex")
+	}
+
+	// Bring up the link.
+	if err := conn.LinkUp(link); err != nil {
+		return errors.Wrap(err, "setting up link 'lo'")
+	}
+
+	// Add the address to the link.
+	if err := conn.AddrAdd(link, rtnl.MustParseAddr(bindAddr+"/32")); err != nil {
+		return errors.Wrap(err, "adding address to 'lo'")
+	}
+
+	return err
 }
