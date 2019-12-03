@@ -1,9 +1,9 @@
 package udpecho
 
 import (
+	"fmt"
 	"log"
 	"net"
-	"strconv"
 	"time"
 )
 
@@ -21,9 +21,14 @@ type MockUDP struct {
 
 // Dial opens a UDP socket to the given port on localhost.
 // Returns a new MockUDP.
-func Dial(port uint16) MockUDP {
+// When host is an empty string, connects to 127.0.1.1 by default.
+func Dial(host string, port uint16) MockUDP {
 
-	dst, err := net.ResolveUDPAddr("udp", "localhost:"+strconv.Itoa(int(port)))
+	if host == "" {
+		host = "127.0.1.1"
+	}
+
+	dst, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		log.Fatalln("error resolving UDP address:", err)
 	}
