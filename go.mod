@@ -9,7 +9,7 @@ require (
 	github.com/influxdata/influxdb v1.7.4
 	github.com/influxdata/platform v0.0.0-20190117200541-d500d3cf5589 // indirect
 	github.com/iovisor/gobpf v0.0.0-20190311163924-89fd87167a6e
-	github.com/jsimonetti/rtnetlink v0.0.0-20190606172950-9527aa82566a
+	github.com/jsimonetti/rtnetlink v0.0.0-20191203001355-5d027701a5b7
 	github.com/lorenzosaino/go-sysctl v0.1.0
 	github.com/magefile/mage v1.8.0
 	github.com/mdlayher/netlink v0.0.0-20191009155606-de872b0d824b
