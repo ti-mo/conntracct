@@ -56,7 +56,18 @@ func TestMain(m *testing.M) {
 		},
 	}
 
+	// Set up a dummy network namespace and immediately close it.
+	// One of the steps of preparing a namespace includes installing an nftables ruleset.
+	// This ruleset contains a conntrack matcher, which will automatically cause the correct
+	// conntrack kernel module to be loaded. This means we don't have to explicitly modprobe.
+	_, _, f, err := prepareNetNS(9999)
+	f()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Create and start the Probe.
+	// For this to succeed, a conntrack kernel module needs to have been pre-loaded.
 	acctProbe, err = NewProbe(cfg)
 	if err != nil {
 		log.Fatal(err)
