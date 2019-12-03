@@ -77,64 +77,6 @@ func TestMain(m *testing.M) {
 	os.Exit(rc)
 }
 
-// prepareNetNS creates a Conn in a new network namespace to use for testing.
-// Returns the UDP server and client, the netns identifier and error, if any.
-func prepareNetNS(port uint16) (*udpecho.MockUDP, int, func(), error) {
-
-	// Lock the current goroutine to the OS thread.
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	// Get the current network namespace and
-	// return the thread to it before unlocking.
-	oldns, err := netns.Get()
-	if err != nil {
-		return nil, 0, nil, err
-	}
-	defer func() {
-		if err := netns.Set(oldns); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	// Allocate new network namespace.
-	newns, err := netns.New()
-	if err != nil {
-		return nil, 0, nil, errors.Wrap(err, "creating network namespace")
-	}
-
-	// Set up network interfaces inside the new netns.
-	if err := setupInterface(newns); err != nil {
-		return nil, 0, nil, errors.Wrap(err, "setting up interfaces")
-	}
-
-	// Set up nftables rules inside network namespace.
-	if err := setupNFTables(port, newns); err != nil {
-		return nil, 0, nil, errors.Wrap(err, "setting up nftables")
-	}
-
-	// Set the required sysctl's for the probe to gather accounting data.
-	if err := Sysctls(false); err != nil {
-		return nil, 0, nil, errors.Wrap(err, "applying sysctl")
-	}
-
-	// Create UDP listener inside network namespace.
-	srv := udpecho.ListenAndEcho(bindAddr, port)
-
-	// Create UDP client inside network namespace.
-	client := udpecho.Dial(bindAddr, port)
-
-	// Closer function passed to the caller to conveniently
-	// close all resources.
-	closer := func() {
-		client.Close()
-		srv.Close()
-		newns.Close()
-	}
-
-	return &client, int(newns), closer, nil
-}
-
 // Checks if the first packet in a flow is logged, and that
 // a further read from the channel times out.
 func TestProbeFirstPacket(t *testing.T) {
@@ -399,6 +341,64 @@ func newUpdateConsumer(t *testing.T) (*Consumer, chan Event) {
 	return ac, c
 }
 
+// prepareNetNS creates a Conn in a new network namespace to use for testing.
+// Returns the UDP server and client, the netns identifier and error, if any.
+func prepareNetNS(port uint16) (*udpecho.MockUDP, int, func(), error) {
+
+	// Lock the current goroutine to the OS thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Get the current network namespace and
+	// return the thread to it before unlocking.
+	oldns, err := netns.Get()
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	defer func() {
+		if err := netns.Set(oldns); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// Allocate new network namespace.
+	newns, err := netns.New()
+	if err != nil {
+		return nil, 0, nil, errors.Wrap(err, "creating network namespace")
+	}
+
+	// Set up network interfaces inside the new netns.
+	if err := setupInterface(newns); err != nil {
+		return nil, 0, nil, errors.Wrap(err, "setting up interfaces")
+	}
+
+	// Set up nftables rules inside network namespace.
+	if err := setupNFTables(port, newns); err != nil {
+		return nil, 0, nil, errors.Wrap(err, "setting up nftables")
+	}
+
+	// Set the required sysctl's for the probe to gather accounting data.
+	if err := Sysctls(false); err != nil {
+		return nil, 0, nil, errors.Wrap(err, "applying sysctl")
+	}
+
+	// Create UDP listener inside network namespace.
+	srv := udpecho.ListenAndEcho(bindAddr, port)
+
+	// Create UDP client inside network namespace.
+	client := udpecho.Dial(bindAddr, port)
+
+	// Closer function passed to the caller to conveniently
+	// close all resources.
+	closer := func() {
+		client.Close()
+		srv.Close()
+		newns.Close()
+	}
+
+	return &client, int(newns), closer, nil
+}
+
 type CTState int
 
 const (
@@ -466,6 +466,8 @@ func setupNFTables(port uint16, ns netns.NsHandle) error {
 			},
 
 			// New connections.
+			// By matching on a conntrack state somewhere in the chain, we enable connection
+			// tracking on all packets that are accepted somewhere in this chain.
 			&expr.Ct{
 				Key:      expr.CtKeySTATE,
 				Register: 1,
@@ -551,7 +553,7 @@ func setupNFTables(port uint16, ns netns.NsHandle) error {
 func setupInterface(ns netns.NsHandle) error {
 
 	// Dial a connection to the rtnetlink socket. Specify the netns
-	// since netlink spawns a worker on/ a fresh OS thread. This thread
+	// since netlink spawns a worker on a fresh OS thread. This thread
 	// needs to be moved into the netns.
 	conn, err := rtnl.Dial(&netlink.Config{NetNS: int(ns)})
 	if err != nil {
