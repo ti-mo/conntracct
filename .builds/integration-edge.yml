@@ -1,0 +1,48 @@
+# Integration test against a rolling/cutting-edge distribution.
+# Uploads coverage reports to coveralls.
+image: archlinux
+packages:
+  - go
+  - curl
+sources:
+  - https://github.com/ti-mo/conntracct
+environment:
+  GOTRACEBACK: "all"
+tasks:
+  - prepare: |
+      # Goveralls
+      go get github.com/mattn/goveralls
+
+      # golangci-lint
+      curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.21.0
+
+      # Mage
+      git clone https://github.com/magefile/mage
+      cd mage
+      GOBIN="$HOME/bin" go run bootstrap.go
+
+  - test: |
+      # Display environment.
+      go version
+      uname -a
+
+      # golangci-lint installs in $HOME/bin.
+      export PATH="$HOME/bin:$PATH"
+
+      # Enter project directory.
+      cd conntracct
+      go get -t -tags=integration -d -v ./...
+
+      mage lint
+      mage integration:test
+
+  - coverage: |
+      # Enter project directory.
+      cd conntracct
+
+      # Upload coverage report.
+      set +x
+      /home/build/go/bin/goveralls -coverprofile test/output/integration.cover -service sr.ht-edge -repotoken "$(< ~/.coveralls-token)" || true
+
+secrets:
+- 2fd83957-7e62-4901-b5ed-c8235f80010d
