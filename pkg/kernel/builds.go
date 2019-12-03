@@ -27,6 +27,13 @@ var Builds = map[string]Kernel{
 		Params:  params["MarkNFTNat"],
 		Probes:  kprobes["acct_v1"],
 	},
+	// In 5.3, `u16 cpu` and `u32 timeout` got swapped in struct nf_conn.
+	"5.3.0": {
+		Version: "5.3.14",
+		URL:     "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.3.14.tar.xz",
+		Params:  params["MarkNFTNat"],
+		Probes:  kprobes["acct_v1"],
+	},
 }
 
 var params = map[string]Params{
