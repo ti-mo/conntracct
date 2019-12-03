@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
@@ -354,7 +355,7 @@ func newUpdateConsumer(t *testing.T) (*Consumer, chan Event) {
 
 // prepareNetNS creates a Conn in a new network namespace to use for testing.
 // Returns the UDP server and client, the netns identifier and error, if any.
-func prepareNetNS(port uint16) (*udpecho.MockUDP, int, func(), error) {
+func prepareNetNS(port uint16) (*udpecho.MockUDP, uint64, func(), error) {
 
 	// Lock the current goroutine to the OS thread.
 	runtime.LockOSThread()
@@ -407,7 +408,7 @@ func prepareNetNS(port uint16) (*udpecho.MockUDP, int, func(), error) {
 		newns.Close()
 	}
 
-	return &client, int(newns), closer, nil
+	return &client, netnsInode(newns), closer, nil
 }
 
 type CTState int
@@ -590,4 +591,18 @@ func setupInterface(ns netns.NsHandle) error {
 	}
 
 	return err
+}
+
+func netnsInode(ns netns.NsHandle) uint64 {
+
+	if ns == -1 {
+		panic("cannot get inode of a closed netns")
+	}
+
+	var s syscall.Stat_t
+	if err := syscall.Fstat(int(ns), &s); err != nil {
+		panic("error calling Fstat() on NsHandle: " + err.Error())
+	}
+
+	return s.Ino
 }
