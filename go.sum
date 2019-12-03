@@ -170,8 +170,8 @@ github.com/influxdata/platform v0.0.0-20190117200541-d500d3cf5589 h1:oN2MMxbnMD/
 github.com/influxdata/platform v0.0.0-20190117200541-d500d3cf5589/go.mod h1:YVhys+JOY4wmXtJvdtkzLhS2K/r/px/vPc+EAddK+pg=
 github.com/influxdata/tdigest v0.0.0-20181121200506-bf2b5ad3c0a9/go.mod h1:Js0mqiSBE6Ffsg94weZZ2c+v/ciT8QRHFOap7EKDrR0=
 github.com/influxdata/usage-client v0.0.0-20160829180054-6d3895376368/go.mod h1:Wbbw6tYNvwa5dlB6304Sd+82Z3f7PmVZHVKU637d4po=
-github.com/iovisor/gobpf v0.0.0-20190311163924-89fd87167a6e h1:Di7h/NHIbGTp3tzagvUEdh4txbVN+k3S0ftQXg3htyk=
-github.com/iovisor/gobpf v0.0.0-20190311163924-89fd87167a6e/go.mod h1:+5U5qu5UOu8YJ5oHVLvWKH7/Dr5QNHU7mZ2RfPEeXg8=
+github.com/iovisor/gobpf v0.0.0-20191129151106-ac26197bb7be h1:WNEVzJxiZ+v09Rr6YWuz4v0lOXJIrGXDZYQDisq64EA=
+github.com/iovisor/gobpf v0.0.0-20191129151106-ac26197bb7be/go.mod h1:+5U5qu5UOu8YJ5oHVLvWKH7/Dr5QNHU7mZ2RfPEeXg8=
 github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99/go.mod h1:1lJo3i6rXxKeerYnT8Nvf0QmHCRC1n8sfWVwXF2Frvo=
 github.com/jefferai/jsonx v0.0.0-20160721235117-9cc31c3135ee/go.mod h1:N0t2vlmpe8nyZB5ouIbJQPDSR+mH6oe7xHB9VZHSUzM=
 github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=

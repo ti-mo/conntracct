@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/mux v1.7.0
 	github.com/influxdata/influxdb v1.7.4
 	github.com/influxdata/platform v0.0.0-20190117200541-d500d3cf5589 // indirect
-	github.com/iovisor/gobpf v0.0.0-20190311163924-89fd87167a6e
+	github.com/iovisor/gobpf v0.0.0-20191129151106-ac26197bb7be
 	github.com/jsimonetti/rtnetlink v0.0.0-20191203001355-5d027701a5b7
 	github.com/lorenzosaino/go-sysctl v0.1.0
 	github.com/magefile/mage v1.8.0
