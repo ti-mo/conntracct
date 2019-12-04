@@ -13,18 +13,22 @@ import (
 // Init initializes the pipeline. Only runs once, subsequent calls are no-ops.
 func (p *Pipeline) Init(pc *config.ProbeConfig) error {
 
+	if pc == nil {
+		return errProbeConfig
+	}
+
 	var err error
 
 	p.init.Do(func() {
-		err = p.initAcct(pc)
+		err = p.initProbe(pc)
 	})
 
 	return err
 }
 
-// initAcct initializes the accounting probe and consumers.
+// initProbe initializes the accounting probe and consumers.
 // Should only be called once, eg. gated behind a sync.Once.
-func (p *Pipeline) initAcct(pc *config.ProbeConfig) error {
+func (p *Pipeline) initProbe(pc *config.ProbeConfig) error {
 
 	// Extract BPF configuration from app configuration.
 	cfg := pc.BPFConfig()
