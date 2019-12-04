@@ -5,6 +5,7 @@ import (
 
 	"github.com/ti-mo/conntracct/pkg/bpf"
 
+	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/sinks/dummy"
 	"github.com/ti-mo/conntracct/internal/sinks/elasticsearch"
 	"github.com/ti-mo/conntracct/internal/sinks/influxdb"
@@ -17,7 +18,7 @@ import (
 type Sink interface {
 
 	// Initialize the sink with the given configuration.
-	Init(types.SinkConfig) error
+	Init(config.SinkConfig) error
 
 	// Check whether or not the sink is initialized.
 	IsInit() bool
@@ -41,7 +42,7 @@ type Sink interface {
 
 // New returns a new, initialized Sink based on the type of
 // the given SinkConfig.
-func New(cfg types.SinkConfig) (Sink, error) {
+func New(cfg config.SinkConfig) (Sink, error) {
 
 	var sink Sink
 

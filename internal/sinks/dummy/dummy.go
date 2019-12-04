@@ -1,8 +1,10 @@
 package dummy
 
 import (
-	"github.com/ti-mo/conntracct/internal/sinks/types"
 	"github.com/ti-mo/conntracct/pkg/bpf"
+
+	"github.com/ti-mo/conntracct/internal/config"
+	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
 // Dummy is an accounting sink that does nothing. At all.
@@ -12,7 +14,7 @@ type Dummy struct {
 	init bool
 
 	// Sink's configuration object.
-	config types.SinkConfig
+	config config.SinkConfig
 
 	stats types.SinkStats
 }
@@ -23,7 +25,7 @@ func New() Dummy {
 }
 
 // Init initializes the Dummy sink.
-func (d *Dummy) Init(sc types.SinkConfig) error {
+func (d *Dummy) Init(sc config.SinkConfig) error {
 	d.config = sc
 	d.init = true
 	return nil

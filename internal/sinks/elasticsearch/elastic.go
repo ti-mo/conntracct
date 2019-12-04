@@ -9,6 +9,7 @@ import (
 	elastic "github.com/olivere/elastic/v7"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
 	"github.com/ti-mo/conntracct/pkg/boottime"
 	"github.com/ti-mo/conntracct/pkg/bpf"
@@ -22,7 +23,7 @@ type ElasticSink struct {
 	init bool
 
 	// Sink's configuration object.
-	config types.SinkConfig
+	config config.SinkConfig
 
 	// Estimated boot time of the machine.
 	bootTime time.Time
@@ -47,7 +48,7 @@ func New() ElasticSink {
 }
 
 // Init initializes the ElasticSearch accounting sink.
-func (s *ElasticSink) Init(sc types.SinkConfig) error {
+func (s *ElasticSink) Init(sc config.SinkConfig) error {
 
 	if sc.Name == "" {
 		return errEmptySinkName

@@ -7,6 +7,7 @@ import (
 
 	influx "github.com/influxdata/influxdb/client/v2"
 
+	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/sinks/helpers"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
 	"github.com/ti-mo/conntracct/pkg/boottime"
@@ -24,7 +25,7 @@ type InfluxSink struct {
 	init bool
 
 	// Sink's configuration object.
-	config types.SinkConfig
+	config config.SinkConfig
 
 	// Boot time of the machine. (estimated)
 	bootTime time.Time
@@ -49,7 +50,7 @@ func New() InfluxSink {
 }
 
 // Init initializes the InfluxDB accounting sink.
-func (s *InfluxSink) Init(sc types.SinkConfig) error {
+func (s *InfluxSink) Init(sc config.SinkConfig) error {
 
 	// Validate / sanitize input.
 	if sc.Name == "" {

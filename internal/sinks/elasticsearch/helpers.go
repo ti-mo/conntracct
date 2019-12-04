@@ -3,14 +3,14 @@ package elasticsearch
 import (
 	"strings"
 
-	"github.com/ti-mo/conntracct/internal/sinks/types"
+	"github.com/ti-mo/conntracct/internal/config"
 
 	elastic "github.com/olivere/elastic/v7"
 	log "github.com/sirupsen/logrus"
 )
 
 // sinkDefaults sets default values on a SinkConfig structure.
-func sinkDefaults(sc *types.SinkConfig) {
+func sinkDefaults(sc *config.SinkConfig) {
 
 	if sc.Address == "" {
 		sc.Address = "http://localhost:9200"
@@ -31,7 +31,7 @@ func sinkDefaults(sc *types.SinkConfig) {
 
 // clientOptions extracts values from a SinkConfig to configure
 // an elastic client.
-func clientOptions(sc types.SinkConfig) []elastic.ClientOptionFunc {
+func clientOptions(sc config.SinkConfig) []elastic.ClientOptionFunc {
 
 	// Initialize opts with a list of cluster addresses.
 	opts := []elastic.ClientOptionFunc{

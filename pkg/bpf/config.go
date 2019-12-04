@@ -62,7 +62,7 @@ const (
 func configureProbe(mod *elf.Module, cfg Config) error {
 
 	// Set sane defaults on the configuration structure.
-	probeDefaults(&cfg)
+	cfg.probeDefaults()
 
 	if err := probeConfigVerify(cfg); err != nil {
 		return errors.Wrap(err, "verifying probe configuration")
@@ -112,7 +112,7 @@ func configureProbe(mod *elf.Module, cfg Config) error {
 
 // configureProbeDefaults manipulates the given Config to set it up with
 // default values.
-func probeDefaults(cfg *Config) {
+func (cfg *Config) probeDefaults() {
 
 	// Curve point 0.
 

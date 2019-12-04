@@ -15,7 +15,6 @@ import (
 	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/pipeline"
 	"github.com/ti-mo/conntracct/internal/pprof"
-	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
 // runCmd represents the run command
@@ -32,12 +31,11 @@ func init() {
 
 func run(cmd *cobra.Command, args []string) error {
 
-	// Listen on for pprof sessions if enabled.
 	if viper.GetBool(cfgPProfEnabled) {
 		pprof.ListenAndServe(viper.GetString(cfgPProfEndpoint))
 	}
 
-	pcfg, scfg, err := getConfig()
+	pcfg, scfg, err := getProbeSinkConfig()
 	if err != nil {
 		return err
 	}
@@ -87,23 +85,32 @@ func run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func getConfig() (*config.ProbeConfig, []types.SinkConfig, error) {
+// getProbeSinkConfig parses the probe and sink configurations from Viper.
+func getProbeSinkConfig() (*config.ProbeConfig, []config.SinkConfig, error) {
 
 	// Get probe configuration from Viper.
 	pcfg, err := config.DecodeProbeConfigMap(viper.GetStringMap(cfgProbe))
 	if err != nil {
 		return nil, nil, err
 	}
+	log.Debug("Read probe configuration: ", pcfg)
 
-	log.Debugf("Read probe configuration: %+v", *pcfg)
+	// Fill ProbeConfig with defaults.
+	pcfg.Default(config.DefaultProbeConfig)
+	log.Info("Using probe configuration: ", pcfg)
 
 	// Get sink configuration from Viper.
-	scfg, err := types.DecodeSinkConfigMap(viper.GetStringMap(cfgSinks))
+	scfg, err := config.DecodeSinkConfigMap(viper.GetStringMap(cfgSinks))
 	if err != nil {
 		return nil, nil, err
 	}
-
 	log.Debugf("Read sink configuration: %+v", scfg)
+
+	if len(scfg) == 0 {
+		scfg = config.DefaultSinkConfig
+	}
+	// Log as debug, these often contain credentials.
+	log.Debugf("Using sink configuration: %+v", scfg)
 
 	return pcfg, scfg, nil
 }
