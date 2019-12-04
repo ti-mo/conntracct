@@ -10,6 +10,15 @@ import (
 	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
+// DefaultSinkConfig is the default sink configuration.
+var DefaultSinkConfig = []SinkConfig{
+	{
+		Name:          "stdout",
+		Type:          types.StdOut,
+		EnableSrcPort: true,
+	},
+}
+
 // SinkConfig represents the configuration of an accounting sink.
 type SinkConfig struct {
 

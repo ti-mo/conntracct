@@ -104,8 +104,13 @@ func getProbeSinkConfig() (*config.ProbeConfig, []config.SinkConfig, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-
 	log.Debugf("Read sink configuration: %+v", scfg)
+
+	if len(scfg) == 0 {
+		scfg = config.DefaultSinkConfig
+	}
+	// Log as debug, these often contain credentials.
+	log.Debugf("Using sink configuration: %+v", scfg)
 
 	return pcfg, scfg, nil
 }

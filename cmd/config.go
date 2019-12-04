@@ -20,6 +20,7 @@ var (
 	cfgPProfEnabled  = "pprof_enabled"
 	cfgPProfEndpoint = "pprof_endpoint"
 
+	// Sink config defaults are set in internal/config.
 	cfgSinks = "sinks"
 
 	// Probe config defaults are set in internal/config.
@@ -30,14 +31,6 @@ var (
 		// HTTP API endpoint.
 		cfgAPIEnabled:  true,
 		cfgAPIEndpoint: "localhost:8000",
-
-		// Sinks for accounting data.
-		cfgSinks: map[string]interface{}{
-			"stdout": map[string]interface{}{
-				"type":        "stdout",
-				"sourcePorts": true,
-			},
-		},
 
 		// Automatically manage Conntrack-related sysctls of the host.
 		cfgSysctlManage: true,
