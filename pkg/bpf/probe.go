@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/iovisor/gobpf/elf"
 	"github.com/pkg/errors"
+	"github.com/ti-mo/gobpf/elf"
 
 	"github.com/ti-mo/conntracct/pkg/kernel"
 )
