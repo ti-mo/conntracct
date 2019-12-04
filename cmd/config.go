@@ -7,9 +7,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
+	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/pipeline"
 	"github.com/ti-mo/conntracct/internal/sinks"
-	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
 var (
@@ -57,7 +57,7 @@ func init() {
 
 // initRegisterSinks initializes a list of sinks according to their types
 // and registers them to the given pipeline.
-func initRegisterSinks(cl []types.SinkConfig, pipe *pipeline.Pipeline) error {
+func initRegisterSinks(cl []config.SinkConfig, pipe *pipeline.Pipeline) error {
 
 	for _, cfg := range cl {
 		// Create and initialize a new sink based on the SinkConfig.

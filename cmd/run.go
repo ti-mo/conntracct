@@ -15,7 +15,6 @@ import (
 	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/pipeline"
 	"github.com/ti-mo/conntracct/internal/pprof"
-	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
 // runCmd represents the run command
@@ -87,7 +86,7 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 // getProbeSinkConfig parses the probe and sink configurations from Viper.
-func getProbeSinkConfig() (*config.ProbeConfig, []types.SinkConfig, error) {
+func getProbeSinkConfig() (*config.ProbeConfig, []config.SinkConfig, error) {
 
 	// Get probe configuration from Viper.
 	pcfg, err := config.DecodeProbeConfigMap(viper.GetStringMap(cfgProbe))
@@ -101,7 +100,7 @@ func getProbeSinkConfig() (*config.ProbeConfig, []types.SinkConfig, error) {
 	log.Info("Using probe configuration: ", pcfg)
 
 	// Get sink configuration from Viper.
-	scfg, err := types.DecodeSinkConfigMap(viper.GetStringMap(cfgSinks))
+	scfg, err := config.DecodeSinkConfigMap(viper.GetStringMap(cfgSinks))
 	if err != nil {
 		return nil, nil, err
 	}

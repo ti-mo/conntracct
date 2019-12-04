@@ -1,4 +1,4 @@
-package types
+package config
 
 import (
 	"fmt"
@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
+
+	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
 // SinkConfig represents the configuration of an accounting sink.
@@ -18,7 +20,7 @@ type SinkConfig struct {
 	UDPPayloadSize uint16 `mapstructure:"udpPayloadSize"`
 
 	// The type of accounting sink.
-	Type SinkType `mapstructure:"type"`
+	Type types.SinkType `mapstructure:"type"`
 
 	// Whether or not the sink should receive the flows' source ports.
 	EnableSrcPort bool `mapstructure:"enableSrcPort"`
@@ -89,25 +91,25 @@ func stringToSinkTypeHookFunc() mapstructure.DecodeHookFunc {
 		if f.Kind() != reflect.String {
 			return data, nil
 		}
-		if t != reflect.TypeOf(SinkType(0)) {
+		if t != reflect.TypeOf(types.SinkType(0)) {
 			return data, nil
 		}
 
 		switch data {
 		case "dummy":
-			return Dummy, nil
+			return types.Dummy, nil
 		case "stdout":
-			return StdOut, nil
+			return types.StdOut, nil
 		case "stderr":
-			return StdErr, nil
+			return types.StdErr, nil
 		case "influxdb-udp":
-			return InfluxUDP, nil
+			return types.InfluxUDP, nil
 		case "influxdb-http":
-			return InfluxHTTP, nil
+			return types.InfluxHTTP, nil
 		case "elastic", "elasticsearch":
-			return Elastic, nil
+			return types.Elastic, nil
 		default:
-			return SinkType(0), fmt.Errorf("failed parsing sink type %v", data)
+			return types.SinkType(0), fmt.Errorf("failed parsing sink type %v", data)
 		}
 	}
 }

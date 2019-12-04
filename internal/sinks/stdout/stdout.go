@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"os"
 
-	"github.com/ti-mo/conntracct/internal/sinks/types"
 	"github.com/ti-mo/conntracct/pkg/bpf"
+
+	"github.com/ti-mo/conntracct/internal/config"
+	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
 // StdOut is an accounting sink writing to standard output/error.
@@ -15,7 +17,7 @@ type StdOut struct {
 	init bool
 
 	// Sink's configuration object.
-	config types.SinkConfig
+	config config.SinkConfig
 
 	// Sink stats.
 	stats types.SinkStats
@@ -34,7 +36,7 @@ func New() StdOut {
 }
 
 // Init initializes the StdOut sink.
-func (s *StdOut) Init(sc types.SinkConfig) error {
+func (s *StdOut) Init(sc config.SinkConfig) error {
 
 	// Validate / sanitize input.
 	if sc.Name == "" {
