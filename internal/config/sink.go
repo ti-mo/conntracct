@@ -13,9 +13,9 @@ import (
 // DefaultSinkConfig is the default sink configuration.
 var DefaultSinkConfig = []SinkConfig{
 	{
-		Name:          "stdout",
-		Type:          types.StdOut,
-		EnableSrcPort: true,
+		Name:        "stdout",
+		Type:        types.StdOut,
+		SourcePorts: true,
 	},
 }
 
@@ -32,7 +32,7 @@ type SinkConfig struct {
 	Type types.SinkType `mapstructure:"type"`
 
 	// Whether or not the sink should receive the flows' source ports.
-	EnableSrcPort bool `mapstructure:"enableSrcPort"`
+	SourcePorts bool `mapstructure:"sourcePorts"`
 
 	// Name of the sink.
 	Name string `mapstructure:"-"`

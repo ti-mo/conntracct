@@ -30,7 +30,7 @@ sinks:
     type: influxdb-udp
     address: "localhost:8089"
     batchSize: 200
-    sourcePorts: false
+    # sourcePorts: false   # (default: false) log connections' (usually-)random source ports
     # udpPayloadSize: 512  # (default: 512) only change this on local networks within MTU
 
   influxdb_http:
@@ -38,7 +38,7 @@ sinks:
     address: "http://localhost:8086"
     database: conntracct_http
     batchSize: 200
-    sourcePorts: false
+    # sourcePorts: false
 
   elastic:
     type: elastic

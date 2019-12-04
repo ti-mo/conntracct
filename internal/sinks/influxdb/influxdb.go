@@ -160,7 +160,7 @@ func (s *InfluxSink) push(e bpf.Event) {
 	}
 
 	// Optionally set flows' source ports (since they're random in most cases)
-	if s.config.EnableSrcPort {
+	if s.config.SourcePorts {
 		tags["src_port"] = strconv.FormatUint(uint64(e.SrcPort), 10)
 	}
 
