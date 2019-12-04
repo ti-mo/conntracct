@@ -314,6 +314,8 @@ github.com/stretchr/testify v1.2.2 h1:bSDNvY7ZPG5RlJ8otE/7V6gMiyenm9RtJ7IUVIAoJ1
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/tcnksm/go-input v0.0.0-20180404061846-548a7d7a8ee8/go.mod h1:IlWNj9v/13q7xFbaK4mbyzMNwrZLaWSHx/aibKIZuIg=
 github.com/testcontainers/testcontainer-go v0.0.0-20181115231424-8e868ca12c0f/go.mod h1:SrG3IY071gtmZJjGbKO+POJ57a/MMESerYNWt6ZRtKs=
+github.com/ti-mo/gobpf v0.0.0-20191203213510-34947af25786 h1:bpDSXOSWhQcOn4FGAakaGNwVZzkifT59l1EJZ8VRl/I=
+github.com/ti-mo/gobpf v0.0.0-20191203213510-34947af25786/go.mod h1:uVTtCPNJ7VjhEQFwv7KW+kyfmU92V+XsFlfmdvmt7/U=
 github.com/ti-mo/kconfig v0.0.0-20181208153747-0708bf82969f h1:T7sfRIPh8vsabiYlogEpC+ydpskAyqNQMx/tkPsEgi4=
 github.com/ti-mo/kconfig v0.0.0-20181208153747-0708bf82969f/go.mod h1:a+7FMqGrlFRrDR6qCcr2uWXFGoJ6iAxn3JqyjYMj2GE=
 github.com/tinylib/msgp v1.0.2/go.mod h1:+d+yLhGm8mzTaHzB+wgMYrodPfmZrzkirds8fDWklFE=

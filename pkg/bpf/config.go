@@ -6,7 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/iovisor/gobpf/elf"
+	"github.com/ti-mo/gobpf/elf"
 )
 
 var (

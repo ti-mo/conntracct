@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/mux v1.7.0
 	github.com/influxdata/influxdb v1.7.4
 	github.com/influxdata/platform v0.0.0-20190117200541-d500d3cf5589 // indirect
-	github.com/iovisor/gobpf v0.0.0-20191129151106-ac26197bb7be
+	github.com/iovisor/gobpf v0.0.0-20191129151106-ac26197bb7be // indirect
 	github.com/jsimonetti/rtnetlink v0.0.0-20191203001355-5d027701a5b7
 	github.com/lorenzosaino/go-sysctl v0.1.0
 	github.com/magefile/mage v1.8.0
@@ -22,6 +22,7 @@ require (
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/viper v1.3.2
 	github.com/stretchr/testify v1.2.2
+	github.com/ti-mo/gobpf v0.0.0-20191203213510-34947af25786
 	github.com/ti-mo/kconfig v0.0.0-20181208153747-0708bf82969f
 	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
 	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
