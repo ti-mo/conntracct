@@ -13,7 +13,14 @@ import (
 )
 
 var (
-	appName = "conntracct"
+	appName   = "conntracct"
+	version   = "dev"
+	commit    = "none"
+	date      = "unknown"
+	builtBy   = "mage"
+	goversion = "unknown"
+
+	versionStr = fmt.Sprintf("%s version %s, commit %s, built on %s by %s with %s", appName, version, commit, date, builtBy, goversion)
 
 	cfgFile string
 	debug   bool
@@ -27,6 +34,13 @@ var rootCmd = &cobra.Command{
 It hooks into Conntrack's accounting (acct) subsystem using eBPF to receive
 low-overhead updates to connection packet counters.`,
 	PersistentPreRun: rootPreRun,
+}
+
+// versionCmd represents the version command.
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Display the application's version and build info.",
+	Run:   printVersion,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -43,6 +57,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "",
 		"config file (default conntracct.yml in $HOME/.config/ or /etc/conntracct/)")
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug logging")
+
+	rootCmd.AddCommand(versionCmd)
 }
 
 // initConfig sets up Viper with config search paths and an env prefix.
@@ -85,4 +101,9 @@ func rootPreRun(*cobra.Command, []string) {
 	if debug {
 		log.SetLevel(log.DebugLevel)
 	}
+}
+
+// printVersion prints the app's version string to stdout.
+func printVersion(cmd *cobra.Command, args []string) {
+	fmt.Println(versionStr)
 }
