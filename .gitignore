@@ -1,4 +1,5 @@
 # Build
+dist/
 build/
 bpf/acct.o
 conntracct

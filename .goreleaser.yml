@@ -1,0 +1,38 @@
+---
+before:
+  hooks:
+    - go mod tidy
+    - mage generate
+
+builds:
+- ldflags:
+    - -s -w
+    - -X github.com/ti-mo/conntracct/cmd.version={{.Version}}
+    - -X github.com/ti-mo/conntracct/cmd.commit={{.Commit}}
+    - -X github.com/ti-mo/conntracct/cmd.date={{.Date}}
+    - -X github.com/ti-mo/conntracct/cmd.builtBy=goreleaser
+    - -X "github.com/ti-mo/conntracct/cmd.goversion={{.Env.GOVERSION}}"
+  goos:
+    - linux
+  goarch:
+    - amd64
+  goarm:
+    - 7
+
+archives:
+- replacements:
+    linux: Linux
+    amd64: x86_64
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'

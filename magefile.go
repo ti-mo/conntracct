@@ -17,7 +17,8 @@ const (
 )
 
 var (
-	build = sh.RunCmd("go", "build", "-o", buildPath)
+	build      = sh.RunCmd("go", "build", "-o", buildPath)
+	goreleaser = sh.RunCmd("goreleaser", "release", "--rm-dist")
 )
 
 // Build builds the application.
@@ -38,7 +39,7 @@ func Build() error {
 			return err
 		}
 
-		// Build the application
+		// Build the application.
 		if err := build(); err != nil {
 			return err
 		}
@@ -88,6 +89,22 @@ func Generate() error {
 // Lint runs golangci-lint with the project's configuration.
 func Lint() error {
 	return sh.RunV("golangci-lint", "run")
+}
+
+// Release builds and publishes the release to GitHub.
+func Release() error {
+	return goreleaser()
+}
+
+// Snapshot creates a local snapshot release without publishing to GitHub.
+func Snapshot() error {
+	v, err := sh.Output("go", "version")
+	if err != nil {
+		return err
+	}
+
+	os.Setenv("GOVERSION", v)
+	return goreleaser("--snapshot")
 }
 
 // realPath resolves (nested) symlinks. If the target of a nested symlink does
