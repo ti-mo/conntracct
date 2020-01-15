@@ -29,12 +29,12 @@ This is a small list of features that are planned to
 - [x] Compile C-based eBPF probe against multiple kernel versions concurrently
 - [x] InfluxDB sink driver for real-time flow metrics
 - [x] StdOut/Err sink driver for testing and debugging
+- [x] Elasticsearch sink for archival of finished flows
+- [x] Automated cross-distro test runner
 - [ ] Community-provided Grafana dashboards for InfluxDB and Elastic back-ends
-- [ ] Elasticsearch sink for archival of finished flows
 - [ ] Prometheus endpoint for monitoring pipeline internals
 - [ ] `conntracct test` subcommand to ship eBPF test suite with the binary
 - [ ] ARMv7 (aarch64) support (Odroid XU3/4+, RPi 3+, etc.)
-- [ ] Automated cross-distro test runner
 - [ ] Easy build procedure for targeting a single custom kernel
 - [ ] Pure-go eBPF implementation without Cgo (https://github.com/newtools/ebpf)
 
@@ -47,11 +47,11 @@ When using the BPF probe for real-time accounting events:
 
 - `cap_sys_admin` for calling bpf()
 - `cap_sys_resource` for calling `setrlimit()` for ring buffer memory
-- `cap_ipc_lock` for locking memory for the ring buffer
+- `cap_ipc_lock` for locking memory for the ring buffer (seems no longer required by newer gobpf versions)
 - `cap_dac_override` for opening /sys/kernel/debug/tracing/*
 
 When letting Conntracct manage sysctl:
-- `cap_net_admin` for managing `sysctl net.netfilter.nf_conntrack_acct`
+- `cap_net_admin` for managing `sysctl net.netfilter.nf_conntrack_{acct,timestamp}`
 
 ## Configuring
 
