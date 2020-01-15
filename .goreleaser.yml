@@ -19,11 +19,6 @@ builds:
   goarm:
     - 7
 
-archives:
-- replacements:
-    linux: Linux
-    amd64: x86_64
-
 nfpms:
 - vendor: Timo Beckers
   maintainer: Timo Beckers <timo@incline.eu>
