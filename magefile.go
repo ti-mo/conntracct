@@ -93,17 +93,17 @@ func Lint() error {
 
 // Release builds and publishes the release to GitHub.
 func Release() error {
+	if err := envGoVersion(); err != nil {
+		return err
+	}
 	return goreleaser()
 }
 
 // Snapshot creates a local snapshot release without publishing to GitHub.
 func Snapshot() error {
-	v, err := sh.Output("go", "version")
-	if err != nil {
+	if err := envGoVersion(); err != nil {
 		return err
 	}
-
-	os.Setenv("GOVERSION", v)
 	return goreleaser("--snapshot")
 }
 
@@ -130,4 +130,14 @@ func realPath(path string) string {
 	}
 
 	return path
+}
+
+func envGoVersion() error {
+	v, err := sh.Output("go", "version")
+	if err != nil {
+		return err
+	}
+
+	os.Setenv("GOVERSION", v)
+	return nil
 }
