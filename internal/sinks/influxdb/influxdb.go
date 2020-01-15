@@ -27,9 +27,6 @@ type InfluxSink struct {
 	// Sink's configuration object.
 	config config.SinkConfig
 
-	// Boot time of the machine. (estimated)
-	bootTime time.Time
-
 	// Influx driver client handle.
 	client influx.Client
 
@@ -115,9 +112,6 @@ func (s *InfluxSink) Init(sc config.SinkConfig) error {
 		return errInvalidSinkType
 	}
 
-	// Estimate the machine's boot time, for absolute event timestamps.
-	s.bootTime = boottime.Estimate()
-
 	// Make a buffered channel for sendworkers.
 	s.sendChan = make(chan influx.BatchPoints, 64)
 
@@ -181,7 +175,7 @@ func (s *InfluxSink) push(e bpf.Event) {
 
 	// To obtain the absolute time stamp of an event in kernel space,
 	// we add its (monotonic) time stamp to the estimated boot time of the kernel.
-	ts := s.bootTime.Add(time.Duration(e.Timestamp))
+	ts := time.Unix(0, boottime.Absolute(int64(e.Timestamp)))
 
 	pt, err := influx.NewPoint("ct_acct", tags, fields, ts)
 	if err != nil {

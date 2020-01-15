@@ -11,7 +11,6 @@ import (
 
 	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
-	"github.com/ti-mo/conntracct/pkg/boottime"
 	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
@@ -24,9 +23,6 @@ type ElasticSink struct {
 
 	// Sink's configuration object.
 	config config.SinkConfig
-
-	// Estimated boot time of the machine.
-	bootTime time.Time
 
 	// elastic driver client handle.
 	client *elastic.Client
@@ -75,10 +71,6 @@ func (s *ElasticSink) Init(sc config.SinkConfig) error {
 
 	s.config = sc
 	s.client = client
-
-	// Estimate the machine's boot time, for absolute event timestamps.
-	// TODO(timo): Make this automatically refresh every x seconds.
-	s.bootTime = boottime.Estimate()
 
 	// Install index templates (mapping and shard/replica settings).
 	if err := s.installMappings(sc.Database); err != nil {
