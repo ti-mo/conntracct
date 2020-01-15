@@ -1,0 +1,10 @@
+---
+# Conntracct Default Configuration
+# Contains a bare minimum configuration that outputs all flow info to stdout.
+# Shipped as the default with conntracct distribution packages.
+#
+# See https://github.com/ti-mo/conntracct/blob/master/configs/conntracct.yml
+# for an overview of all available configurables.
+sinks:
+  stdout:
+    type: stdout
