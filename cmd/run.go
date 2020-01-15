@@ -80,7 +80,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// Wait for program to be interrupted.
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
 	log.Info("Exiting with signal ", <-sig)
 

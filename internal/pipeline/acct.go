@@ -1,6 +1,8 @@
 package pipeline
 
 import (
+	"strings"
+
 	"github.com/pkg/errors"
 
 	log "github.com/sirupsen/logrus"
@@ -93,7 +95,10 @@ func (p *Pipeline) startAcct() error {
 
 	// Start the Probe.
 	if err := p.acctProbe.Start(); err != nil {
-		return errors.Wrap(err, "starting Probe")
+		if strings.Contains(err.Error(), "kprobe_events") {
+			log.Warn("Either another conntracct instance is running, or the program was sent a SIGKILL. Try running 'echo | sudo tee /sys/kernel/debug/tracing/kprobe_events'. (will detach all kprobes)")
+		}
+		return errors.Wrap(err, "starting probe")
 	}
 
 	log.Info("Started accounting probe and workers")
