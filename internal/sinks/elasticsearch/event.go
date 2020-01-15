@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ti-mo/conntracct/internal/sinks/helpers"
+	"github.com/ti-mo/conntracct/pkg/boottime"
 	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
@@ -41,7 +42,7 @@ func (s *ElasticSink) transformEvent(e *event) {
 	e.Start = e.Start / uint64(time.Millisecond)
 
 	// Apply boot time offset to the (relative) event timestamp, convert to milliseconds.
-	e.Timestamp = uint64(s.bootTime.Add(time.Duration(e.Timestamp)).UnixNano() / int64(time.Millisecond))
+	e.Timestamp = uint64(boottime.Absolute(int64(e.Timestamp)) / int64(time.Millisecond))
 
 	// Calculated fields.
 	e.PacketsTotal = e.PacketsOrig + e.PacketsRet
