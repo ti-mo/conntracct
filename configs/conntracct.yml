@@ -1,5 +1,6 @@
 ---
 # Conntracct Example Configuration
+# Contains an overview of all configurables of the tool.
 
 # HTTP API endpoint.
 api_enabled: true
@@ -48,6 +49,9 @@ sinks:
     # replicas: 0            # (default) amount of replicas to use for indices
     # username: my-username  # basic HTTP auth username
     # password: my-password  # basic HTTP auth password
+
+  stdout:
+    type: stdout
 
   dummy:
     type: dummy

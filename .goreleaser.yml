@@ -1,0 +1,65 @@
+---
+before:
+  hooks:
+    - go mod tidy
+    - mage generate
+
+builds:
+- ldflags:
+    - -s -w
+    - -X github.com/ti-mo/conntracct/cmd.version={{.Version}}
+    - -X github.com/ti-mo/conntracct/cmd.commit={{.Commit}}
+    - -X github.com/ti-mo/conntracct/cmd.date={{.Date}}
+    - -X github.com/ti-mo/conntracct/cmd.builtBy=goreleaser
+    - -X "github.com/ti-mo/conntracct/cmd.goversion={{.Env.GOVERSION}}"
+  goos:
+    - linux
+  goarch:
+    - amd64
+  goarm:
+    - 7
+
+archives:
+- replacements:
+    linux: Linux
+    amd64: x86_64
+
+nfpms:
+- vendor: Timo Beckers
+  maintainer: Timo Beckers <timo@incline.eu>
+  homepage: https://github.com/ti-mo/conntracct
+  description: Low-overhead network flow collector.
+  license: Apache 2.0
+  bindir: /usr/bin
+  formats:
+    - deb
+    - rpm
+  files:
+    "packaging/systemd/conntracct.service": "/lib/systemd/system/conntracct.service"
+  config_files:
+    "configs/default.yml": "/etc/conntracct/conntracct.yml"
+  scripts:
+    postinstall: "packaging/scripts/postinstall.sh"
+
+  overrides:
+    deb:
+      dependencies:
+        # setcap
+        - libcap2-bin
+    rpm:
+      dependencies:
+        # setcap
+        - libcap
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'

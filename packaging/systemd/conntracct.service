@@ -1,0 +1,18 @@
+[Unit]
+Description=Conntracct, low-overhead network flow collector.
+Documentation=https://github.com/ti-mo/conntracct
+Wants=network.target
+After=network-pre.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/conntracct run
+Restart=on-failure
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_DAC_OVERRIDE CAP_SYS_RESOURCE
+
+ProtectSystem=full
+# Allow reading configuration from home directory.
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

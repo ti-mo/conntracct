@@ -17,7 +17,7 @@ import (
 	"github.com/ti-mo/conntracct/internal/pprof"
 )
 
-// runCmd represents the run command
+// runCmd represents the run command.
 var runCmd = &cobra.Command{
 	Use:          "run",
 	Short:        "Listen for conntrack events and send them to configured sinks.",
@@ -30,6 +30,8 @@ func init() {
 }
 
 func run(cmd *cobra.Command, args []string) error {
+
+	log.Infoln("Starting", buildInfo)
 
 	if viper.GetBool(cfgPProfEnabled) {
 		pprof.ListenAndServe(viper.GetString(cfgPProfEndpoint))
