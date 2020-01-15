@@ -20,7 +20,8 @@ var (
 	builtBy   = "mage"
 	goversion = "unknown"
 
-	versionStr = fmt.Sprintf("%s version %s, commit %s, built on %s by %s with %s", appName, version, commit, date, builtBy, goversion)
+	buildInfo     = fmt.Sprintf("%s version %s, commit %s", appName, version, commit)
+	buildInfoLong = fmt.Sprintf("%s version %s, commit %s, built on %s by %s with %s", appName, version, commit, date, builtBy, goversion)
 
 	cfgFile string
 	debug   bool
@@ -105,5 +106,5 @@ func rootPreRun(*cobra.Command, []string) {
 
 // printVersion prints the app's version string to stdout.
 func printVersion(cmd *cobra.Command, args []string) {
-	fmt.Println(versionStr)
+	fmt.Println(buildInfoLong)
 }

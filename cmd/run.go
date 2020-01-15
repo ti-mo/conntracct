@@ -31,7 +31,7 @@ func init() {
 
 func run(cmd *cobra.Command, args []string) error {
 
-	log.Infoln("Starting", versionStr)
+	log.Infoln("Starting", buildInfo)
 
 	if viper.GetBool(cfgPProfEnabled) {
 		pprof.ListenAndServe(viper.GetString(cfgPProfEndpoint))
