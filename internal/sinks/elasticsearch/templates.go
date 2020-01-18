@@ -26,7 +26,7 @@ func (s *ElasticSink) installMappings(db string) error {
 				"packets_orig": { "type":"long" },
 				"packets_ret": { "type":"long" },
 				"packets_total": { "type":"long" }, // Calculated field.
-				"connection_id": { "type":"long" },
+				"flow_id": { "type":"long" },
 				"connmark": { "type":"integer" },
 				"src_addr": { "type":"ip" },
 				"src_port": { "type":"integer" },

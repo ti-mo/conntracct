@@ -27,4 +27,5 @@ require (
 	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
 	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c
+	lukechampine.com/blake3 v0.4.0
 )
