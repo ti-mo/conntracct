@@ -5,12 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"lukechampine.com/blake3"
 )
 
 func TestHashFlow(t *testing.T) {
-
-	h := blake3.New(8, nil)
 
 	e := Event{
 		SrcAddr:      net.ParseIP("1.2.3.4"),
@@ -21,7 +18,5 @@ func TestHashFlow(t *testing.T) {
 		connectionID: 11111111,
 	}
 
-	e.hashFlow(h)
-
-	assert.Equal(t, uint64(0x557151a9a4846ab8), e.FlowID)
+	assert.Equal(t, uint32(0x24846ab8), e.hashFlow())
 }

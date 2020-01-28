@@ -144,7 +144,7 @@ func (s *InfluxSink) push(e bpf.Event) {
 
 	// Create a point and add to batch.
 	tags := map[string]string{
-		"flow_id":  strconv.FormatUint(e.FlowID, 10),
+		"flow_id":  strconv.FormatUint(uint64(e.FlowID), 10),
 		"src_addr": e.SrcAddr.String(),
 		"dst_addr": e.DstAddr.String(),
 		"dst_port": strconv.FormatUint(uint64(e.DstPort), 10),
@@ -164,7 +164,7 @@ func (s *InfluxSink) push(e bpf.Event) {
 	// generally available. Only send signed ints for now until this is more widely deployed.
 	fields := map[string]interface{}{
 		// Include flow_id in both fields and tags so it can be used in both aggregations and selections.
-		"flow_id":       strconv.FormatUint(e.FlowID, 10),
+		"flow_id":       strconv.FormatUint(uint64(e.FlowID), 10),
 		"bytes_orig":    int64(e.BytesOrig),
 		"bytes_ret":     int64(e.BytesRet),
 		"bytes_total":   int64(e.BytesOrig + e.BytesRet),

@@ -7,7 +7,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/ti-mo/gobpf/elf"
-	"lukechampine.com/blake3"
 
 	"github.com/ti-mo/conntracct/pkg/kernel"
 )
@@ -201,10 +200,6 @@ func (ap *Probe) perfWorker() {
 	var eb []byte
 	var ok, update bool
 
-	// Initialize a hasher local to the goroutine. Output size is 64 bits.
-	// The hasher is re-used between invocations of hashFlow and is not thread-safe.
-	h := blake3.New(8, nil)
-
 	for {
 		select {
 		case eb, ok = <-ap.perfUpdateChan:
@@ -224,9 +219,6 @@ func (ap *Probe) perfWorker() {
 		if err := ae.unmarshalBinary(eb); err != nil {
 			ap.sendError(errors.Wrap(err, "error unmarshaling Event byte array"))
 		}
-
-		// Generate and set the Event's FlowID.
-		ae.hashFlow(h)
 
 		// Fanout to all registered consumers.
 		ap.fanoutEvent(ae, update)

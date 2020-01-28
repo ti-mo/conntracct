@@ -3,10 +3,19 @@ package bpf
 import (
 	"encoding/binary"
 	"fmt"
-	"hash"
 	"net"
+	"sync"
 	"unsafe"
+
+	"lukechampine.com/blake3"
 )
+
+var hashPool = sync.Pool{
+	New: func() interface{} {
+		// Output size is 32 bits.
+		return blake3.New(4, nil)
+	},
+}
 
 // EventLength is the length of the struct sent by BPF.
 const EventLength = 104
@@ -15,7 +24,7 @@ const EventLength = 104
 type Event struct {
 	Start       uint64 `json:"start"`     // epoch timestamp of flow start
 	Timestamp   uint64 `json:"timestamp"` // ktime of event, relative to machine boot time
-	FlowID      uint64 `json:"flow_id"`
+	FlowID      uint32 `json:"flow_id"`
 	Connmark    uint32 `json:"connmark"`
 	SrcAddr     net.IP `json:"src_addr"`
 	DstAddr     net.IP `json:"dst_addr"`
@@ -74,13 +83,18 @@ func (e *Event) unmarshalBinary(b []byte) error {
 
 	e.NetNS = *(*uint32)(unsafe.Pointer(&b[92]))
 
+	// Generate and set the Event's FlowID.
+	e.FlowID = e.hashFlow()
+
 	return nil
 }
 
-// hashFlow appends the Event's source and destination address,
-// ports, protocol and connection ID, calculates the hash,
-// sets the Event's FlowID and resets the Hasher.
-func (e *Event) hashFlow(h hash.Hash) {
+// hashFlow calculates a flow hash base on the the Event's
+// source and destination address, ports, protocol and connection ID.
+func (e *Event) hashFlow() uint32 {
+
+	// Get a Hasher from the pool.
+	h := hashPool.Get().(*blake3.Hasher)
 
 	// Source/Destination Address.
 	_, _ = h.Write(e.SrcAddr)
@@ -105,11 +119,16 @@ func (e *Event) hashFlow(h hash.Hash) {
 	binary.BigEndian.PutUint32(b, e.connectionID)
 	_, _ = h.Write(b)
 
-	// Calculate the hash and reset the Hasher.
+	// Calculate the hash.
 	// Shift one position to the right to fit the FlowID into a
-	// (signed) long, eg. in elasticsearch.
-	e.FlowID = binary.LittleEndian.Uint64(h.Sum(nil)) >> 1
+	// signed integer field, eg. in elasticsearch.
+	out := binary.LittleEndian.Uint32(h.Sum(nil)) >> 1
+
+	// Reset and return the Hasher to the pool.
 	h.Reset()
+	hashPool.Put(h)
+
+	return out
 }
 
 // String returns a readable string representation of the Event.
