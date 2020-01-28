@@ -20,13 +20,13 @@ func (s *ElasticSink) installMappings(db string) error {
 		"order": 0,
 		"mappings":{
 			"properties":{
+				"flow_id": { "type":"keyword" },
 				"bytes_orig": { "type":"long" },
 				"bytes_ret": { "type":"long" },
 				"bytes_total": { "type":"long" }, // Calculated field.
 				"packets_orig": { "type":"long" },
 				"packets_ret": { "type":"long" },
 				"packets_total": { "type":"long" }, // Calculated field.
-				"flow_id": { "type":"long" },
 				"connmark": { "type":"integer" },
 				"src_addr": { "type":"ip" },
 				"src_port": { "type":"integer" },
