@@ -1,6 +1,12 @@
 #ifndef __BPF_HELPERS_H
 #define __BPF_HELPERS_H
 
+/* In Linux 5.4, asm_inline was introduced, which is not supported by clang.
+ * Ensure CONFIG_CC_HAS_ASM_INLINE is undefined so the macro in linux/compiler_types.h
+ * doesn't define 'asm_inline' as 'asm __inline'.
+ */
+#undef CONFIG_CC_HAS_ASM_INLINE
+
 #include <linux/bpf.h>
 
 /* helper macro to place programs, maps, license in

@@ -34,6 +34,13 @@ var Builds = map[string]Kernel{
 		Params:  params["MarkNFTNat"],
 		Probes:  kprobes["acct_v1"],
 	},
+	// In 5.5.0, `struct rcu_head rcu` was removed from `struct nf_ct_ext`.
+	"5.5.0": {
+		Version: "5.5.10",
+		URL:     "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.5.10.tar.xz",
+		Params:  params["MarkNFTNat"],
+		Probes:  kprobes["acct_v1"],
+	},
 }
 
 var params = map[string]Params{
