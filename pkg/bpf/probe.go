@@ -1,15 +1,37 @@
 package bpf
 
 import (
+	"crypto/rand"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/perf"
 	"github.com/pkg/errors"
-	"github.com/ti-mo/gobpf/elf"
+	"golang.org/x/sys/unix"
 
 	"github.com/ti-mo/conntracct/pkg/kernel"
 )
+
+var (
+	// Pseudorandom number for generating a 'unique' group name for the
+	// tracing events created for the kernel symbols we want to trace.
+	traceGroupSuffix string
+
+	traceEventsPath = "/sys/kernel/debug/tracing/kprobe_events"
+
+	errInvalidProbeKind = errors.New("only kprobe and kretprobe probes are supported")
+)
+
+func init() {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	traceGroupSuffix = fmt.Sprintf("%x", b)
+}
 
 const perfUpdateMap = "perf_acct_update"
 const perfDestroyMap = "perf_acct_end"
@@ -17,10 +39,10 @@ const perfDestroyMap = "perf_acct_end"
 // Probe is an instance of a BPF probe running in the kernel.
 type Probe struct {
 
-	// gobpf/elf objects.
-	module      *elf.Module
-	perfUpdate  *elf.PerfMap
-	perfDestroy *elf.PerfMap
+	// cilium/ebpf resources.
+	collection    *ebpf.Collection
+	updateReader  *perf.Reader
+	destroyReader *perf.Reader
 
 	// Target kernel of the loaded probe.
 	kernel kernel.Kernel
@@ -30,12 +52,10 @@ type Probe struct {
 	consumers  []*Consumer
 
 	// Channel for receiving IDs of lost perf events.
-	lostChan chan uint64
+	lost chan uint64
 
-	// Communication channels with the perfWorker.
-	perfUpdateChan  chan []byte
-	perfDestroyChan chan []byte
-	errChan         chan error
+	// perfWorker error channel.
+	errs chan error
 
 	// Started status of the probe.
 	startMu sync.Mutex
@@ -44,7 +64,7 @@ type Probe struct {
 	stats *ProbeStats
 }
 
-// NewProbe instantiates an Probe using the given Config.
+// NewProbe instantiates a Probe using the given Config.
 // Loads the BPF program into the kernel but does not attach its kprobes yet.
 func NewProbe(cfg Config) (*Probe, error) {
 
@@ -71,20 +91,124 @@ func NewProbe(cfg Config) (*Probe, error) {
 		return nil, err
 	}
 
-	// Load the module from the bytes.Reader and insert into the kernel.
-	ap.module = elf.NewModuleFromReader(br)
-	if err := ap.module.Load(nil); err != nil {
-		// Error string from go-bpf can contain many NUL characters and need to be trimmed.
-		err = errors.New(strings.TrimRight(err.Error(), "\x00"))
-		return nil, errors.Wrap(err, fmt.Sprintf("failed to load ELF binary version %s", k.Version))
+	spec, err := ebpf.LoadCollectionSpecFromReader(br)
+	if err != nil {
+		return nil, errors.Wrap(err, "loading collection spec")
 	}
 
+	coll, err := ebpf.NewCollection(spec)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating collection")
+	}
+	ap.collection = coll
+
 	// Apply probe configuration.
-	if err := configureProbe(ap.module, cfg); err != nil {
+	if err := ap.configure(cfg); err != nil {
 		return nil, errors.Wrap(err, "configuring BPF probe")
 	}
 
 	return &ap, nil
+}
+
+func probeName(kind, symbol string) string {
+	return kind + "_" + symbol
+}
+
+func probeGroup() string {
+	return "conntracct_" + traceGroupSuffix
+}
+
+func probeEventEntry(group, kind, symbol string) string {
+
+	k := "p"
+	if kind == "kretprobe" {
+		k = "r"
+	}
+	return fmt.Sprintf("%s:%s/%s %s", k, group, probeName(kind, symbol), symbol)
+}
+
+func getTraceEventID(group, name string) (int, error) {
+
+	fname := fmt.Sprintf("/sys/kernel/debug/tracing/events/%s/%s/id", group, name)
+	fb, err := ioutil.ReadFile(fname)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, err
+		}
+		return 0, fmt.Errorf("cannot read kprobe id: %v", err)
+	}
+
+	tid, err := strconv.Atoi(strings.TrimSpace(string(fb)))
+	if err != nil {
+		return 0, fmt.Errorf("invalid kprobe id: %v", err)
+	}
+
+	return tid, nil
+}
+
+func openTraceEvent(group, kind, symbol string) (int, error) {
+
+	if kind != "kprobe" && kind != "kretprobe" {
+		return 0, errInvalidProbeKind
+	}
+
+	f, err := os.OpenFile(traceEventsPath, os.O_APPEND|os.O_WRONLY, 0666)
+	if err != nil {
+		return 0, fmt.Errorf("cannot open %s: %v", traceEventsPath, err)
+	}
+	defer f.Close()
+
+	pe := probeEventEntry(group, kind, symbol)
+	if _, err = f.WriteString(pe); err != nil {
+		return 0, fmt.Errorf("writing %q to kprobe_events: %v", pe, err)
+	}
+
+	tid, err := getTraceEventID(group, probeName(kind, symbol))
+	if err != nil {
+		return 0, fmt.Errorf("getting trace event ID: %s", err)
+	}
+
+	return tid, nil
+}
+
+// perfEventOpenAttach creates a new perf event on tracepoint tid and binds a
+// BPF program's progFd to it.
+func perfEventOpenAttach(tid int, progFd int) (int, error) {
+
+	attrs := &unix.PerfEventAttr{
+		Type:        unix.PERF_TYPE_TRACEPOINT,
+		Sample_type: unix.PERF_SAMPLE_RAW,
+		Sample:      1,
+		Wakeup:      1,
+		Config:      uint64(tid),
+	}
+
+	// Create a perf event that fires each time the given tracepoint
+	// (kernel symbol) is hit.
+	efd, err := unix.PerfEventOpen(attrs, -1, 0, -1, unix.PERF_FLAG_FD_CLOEXEC)
+	if err != nil {
+		return 0, fmt.Errorf("perf_event_open error: %v", err)
+	}
+
+	// Enable the perf event.
+	if err := unix.IoctlSetInt(efd, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
+		return 0, fmt.Errorf("enabling perf event: %v", err)
+	}
+
+	// Set the BPF program to execute each time the perf event fires.
+	if err := unix.IoctlSetInt(efd, unix.PERF_EVENT_IOC_SET_BPF, progFd); err != nil {
+		return 0, fmt.Errorf("attaching bpf program to perf event: %v", err)
+	}
+
+	return efd, nil
+}
+
+// perfEventDisable disables the perf event efd.
+func perfEventDisable(efd int) error {
+	if err := unix.IoctlSetInt(efd, unix.PERF_EVENT_IOC_DISABLE, 0); err != nil {
+		return fmt.Errorf("disabling perf event: %v", err)
+	}
+	return nil
 }
 
 // Start attaches the BPF program's kprobes and starts polling the perf ring buffer.
@@ -97,40 +221,46 @@ func (ap *Probe) Start() error {
 		return errProbeStarted
 	}
 
-	// Enable all kprobes in target kernel's probe list.
 	for _, p := range ap.kernel.Probes {
-		if err := ap.module.EnableKprobe(p, 0); err != nil {
-			return errors.Wrap(err, "enabling kprobe")
+		// Open a trace event for each of the kernel symbols we want to hook.
+		// These events can be routed to the perf subsystem, where BPF programs
+		// can be attached to them.
+		tid, err := openTraceEvent(probeGroup(), p.Kind, p.Name)
+		if err != nil {
+			return err
+		}
+
+		prog, ok := ap.collection.Programs[p.ProgramName()]
+		if !ok {
+			return fmt.Errorf("looking up program '%s' in BPF collection", p.ProgramName())
+		}
+
+		// Create a perf event using the trace event opened above, and attach
+		// a BPF program to it.
+		if _, err := perfEventOpenAttach(tid, prog.FD()); err != nil {
+			return fmt.Errorf("opening perf event: %v", err)
 		}
 	}
 
-	ap.perfUpdateChan = make(chan []byte, 1024)
-	ap.perfDestroyChan = make(chan []byte, 1024)
-	ap.lostChan = make(chan uint64)
-	ap.errChan = make(chan error)
+	ap.lost = make(chan uint64)
+	ap.errs = make(chan error)
 
-	// Set up perf maps with an event and lost channel.
-	um, err := elf.InitPerfMap(ap.module, perfUpdateMap, ap.perfUpdateChan, ap.lostChan)
+	// Set up Readers for reading events from the perf ring buffers.
+	r, err := perf.NewReader(ap.collection.Maps[perfUpdateMap], 4096)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("InitPerfMap %s", perfUpdateMap))
+		return errors.Wrap(err, fmt.Sprintf("NewReader for %s", perfUpdateMap))
 	}
-	ap.perfUpdate = um
+	ap.updateReader = r
 
-	dm, err := elf.InitPerfMap(ap.module, perfDestroyMap, ap.perfDestroyChan, ap.lostChan)
+	r, err = perf.NewReader(ap.collection.Maps[perfDestroyMap], 4096)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("InitPerfMap %s", perfUpdateMap))
+		return errors.Wrap(err, fmt.Sprintf("NewReader for %s", perfDestroyMap))
 	}
-	ap.perfDestroy = dm
+	ap.destroyReader = r
 
-	// Start the event message decoder and fanout worker.
-	go ap.perfWorker()
-
-	// Start worker counting the amount of lost messages.
-	go ap.lostWorker()
-
-	// Start polling the BPF perf ring buffer, into update and destroy chans.
-	um.PollStart()
-	dm.PollStart()
+	// Start event decoder/fanout workers.
+	go ap.updateWorker()
+	go ap.destroyWorker()
 
 	ap.started = true
 
@@ -148,15 +278,19 @@ func (ap *Probe) Stop() error {
 		return errProbeNotStarted
 	}
 
-	// Releases all gobpf-internal resources, including the perfMap poller.
-	if err := ap.module.Close(); err != nil {
+	if err := ap.updateReader.Close(); err != nil {
 		return err
 	}
 
-	close(ap.lostChan)
-	close(ap.perfUpdateChan)
-	close(ap.perfDestroyChan)
-	close(ap.errChan)
+	if err := ap.destroyReader.Close(); err != nil {
+		return err
+	}
+
+	// TODO: Disable perf events.
+	// TODO: Clean up tracepoints.
+
+	close(ap.lost)
+	close(ap.errs)
 
 	return nil
 }
@@ -172,7 +306,7 @@ func (ap *Probe) Kernel() kernel.Kernel {
 // are dropped.
 // Returns nil if the Probe has not been Start()ed yet.
 func (ap *Probe) ErrChan() chan error {
-	return ap.errChan
+	return ap.errs
 }
 
 // Stats returns a snapshot copy of the Probe's statistics.
@@ -185,58 +319,78 @@ func (ap *Probe) Stats() ProbeStats {
 // of true means the error was successfully sent on the channel.
 func (ap *Probe) sendError(err error) bool {
 	select {
-	case ap.errChan <- err:
+	case ap.errs <- err:
 		return true
 	default:
 		return false
 	}
 }
 
-// perfWorker reads binary events from the Probe's event channel,
-// unmarshals the events into Events and sends them on all registered
-// consumers' event channels. Exits if perfUpdateChan or perfDestroyChan are closed.
-func (ap *Probe) perfWorker() {
-
-	var eb []byte
-	var ok, update bool
+// updateWorker reads binady flow update events from the Probe's ring buffer,
+// unmarshals the events into Event structures and sends them on all registered
+// consumers' event channels.
+func (ap *Probe) updateWorker() {
 
 	for {
-		select {
-		case eb, ok = <-ap.perfUpdateChan:
-			update = true
-			ap.stats.incrPerfEventsUpdate()
-		case eb, ok = <-ap.perfDestroyChan:
-			update = false
-			ap.stats.incrPerfEventsDestroy()
+		rec, err := ap.updateReader.Read()
+		if err != nil {
+			// Reader closed, gracefully exit the read loop.
+			if perf.IsClosed(err) {
+				return
+			}
+			panic(fmt.Sprint("unexpected error reading from updateReader:", err))
 		}
 
-		if !ok {
-			// Channel closed.
-			return
+		// Log the amount of lost samples and skip processing the sample.
+		if rec.LostSamples > 0 {
+			ap.stats.incrPerfEventsUpdateLost(rec.LostSamples)
+			continue
 		}
+
+		ap.stats.incrPerfEventsUpdate()
 
 		var ae Event
-		if err := ae.unmarshalBinary(eb); err != nil {
+		if err := ae.unmarshalBinary(rec.RawSample); err != nil {
 			ap.sendError(errors.Wrap(err, "error unmarshaling Event byte array"))
+			continue
 		}
 
-		// Fanout to all registered consumers.
-		ap.fanoutEvent(ae, update)
+		// Fan out update event to all registered consumers.
+		ap.fanoutEvent(ae, true)
 	}
 }
 
-// lostWorker increments the Probe's lost field for every message
-// received on its lostChan. Exits if lostChan is closed.
-func (ap *Probe) lostWorker() {
+// destroyWorker reads binary destroy events from the Probe's ring buffer,
+// unmarshals the events into Event structures and sends them on all registered
+// consumers' event channels .
+func (ap *Probe) destroyWorker() {
 
 	for {
-		_, ok := <-ap.lostChan
-		if !ok {
-			// Channel closed.
-			return
+		rec, err := ap.destroyReader.Read()
+		if err != nil {
+			// Reader closed, gracefully exit the read loop.
+			if perf.IsClosed(err) {
+				return
+			}
+			panic(fmt.Sprint("unexpected error reading from destroyReader:", err))
 		}
 
-		ap.stats.incrPerfEventsLost()
+		// Log the amount of lost samples and skip processing the sample.
+		if rec.LostSamples > 0 {
+			ap.stats.incrPerfEventsDestroyLost(rec.LostSamples)
+			continue
+		}
+
+		ap.stats.incrPerfEventsDestroy()
+
+		var ae Event
+		if err := ae.unmarshalBinary(rec.RawSample); err != nil {
+			ap.sendError(errors.Wrap(err, "error unmarshaling Event byte array"))
+			continue
+		}
+
+		// Fan out destroy event to all registered consumers.
+		ap.fanoutEvent(ae, false)
 	}
 }
 

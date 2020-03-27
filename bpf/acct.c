@@ -45,17 +45,11 @@ const int ready_val = 0x90;
 // perf map to send update events to userspace.
 struct bpf_map_def SEC("maps/perf_acct_update") perf_acct_update = {
   .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-  .key_size = sizeof(int),
-  .value_size = sizeof(__u32),
-  .max_entries = 1024,
 };
 
 // perf map to send destroy events to userspace.
 struct bpf_map_def SEC("maps/perf_acct_end") perf_acct_end = {
   .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-  .key_size = sizeof(int),
-  .value_size = sizeof(__u32),
-  .max_entries = 1024,
 };
 
 // Hash that holds a kernel timestamp per flow indicating when

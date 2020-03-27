@@ -2,6 +2,8 @@ package stdout
 
 import (
 	log "github.com/sirupsen/logrus"
+
+	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
 // outWorker receives events from the sink's event channel
@@ -9,8 +11,14 @@ import (
 func (s *StdOut) outWorker() {
 
 	for {
+		var e bpf.Event
 
-		e := <-s.events
+		select {
+		case e = <-s.updates:
+			_, _ = s.writer.WriteString("Update: ")
+		case e = <-s.destroys:
+			_, _ = s.writer.WriteString("Destroy: ")
+		}
 
 		if _, err := s.writer.WriteString(e.String() + "\n"); err != nil {
 			s.stats.IncrBatchDropped()

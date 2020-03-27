@@ -22,9 +22,10 @@ type StdOut struct {
 	// Sink stats.
 	stats types.SinkStats
 
-	// Internal buffered event channel. BatchLength configuration parameter
-	// is used as the buffer size of the channel.
-	events chan bpf.Event
+	// Buffered event channels. BatchLength configuration parameter
+	// is used as the buffer sizes of these channels.
+	updates  chan bpf.Event
+	destroys chan bpf.Event
 
 	// Stdout/err writer.
 	writer *bufio.Writer
@@ -57,7 +58,8 @@ func (s *StdOut) Init(sc config.SinkConfig) error {
 		return errInvalidSinkType
 	}
 
-	s.events = make(chan bpf.Event, sc.BatchSize)
+	s.updates = make(chan bpf.Event, sc.BatchSize)
+	s.destroys = make(chan bpf.Event, sc.BatchSize)
 	s.config = sc
 
 	go s.outWorker()
@@ -72,9 +74,8 @@ func (s *StdOut) Init(sc config.SinkConfig) error {
 func (s *StdOut) PushUpdate(e bpf.Event) {
 	// Non-blocking send on event channel.
 	select {
-	case s.events <- e:
+	case s.updates <- e:
 		s.stats.IncrUpdateEventsPushed()
-		s.stats.SetBatchLength(len(s.events))
 	default:
 		s.stats.IncrUpdateEventsDropped()
 	}
@@ -84,9 +85,8 @@ func (s *StdOut) PushUpdate(e bpf.Event) {
 func (s *StdOut) PushDestroy(e bpf.Event) {
 	// Non-blocking send on event channel.
 	select {
-	case s.events <- e:
+	case s.destroys <- e:
 		s.stats.IncrDestroyEventsPushed()
-		s.stats.SetBatchLength(len(s.events))
 	default:
 		s.stats.IncrDestroyEventsDropped()
 	}

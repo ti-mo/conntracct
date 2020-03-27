@@ -65,8 +65,17 @@ var kprobes = map[string]Probes{
 	// These probes are enabled in the sequence listed here.
 	// List functions that insert records into a map last to prevent stale records in BPF maps.
 	"acct_v1": {
-		"kprobe/nf_conntrack_free",
-		"kretprobe/__nf_ct_refresh_acct",
-		"kprobe/__nf_ct_refresh_acct",
+		{
+			Kind: "kprobe",
+			Name: "nf_conntrack_free",
+		},
+		{
+			Kind: "kretprobe",
+			Name: "__nf_ct_refresh_acct",
+		},
+		{
+			Kind: "kprobe",
+			Name: "__nf_ct_refresh_acct",
+		},
 	},
 }

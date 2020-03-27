@@ -13,8 +13,20 @@ import (
 // Params is a map of kernel parameters.
 type Params map[string]string
 
+// Probe holds the name and kind of a kprobe/kretprobe.
+type Probe struct {
+	Kind string
+	Name string
+}
+
+// ProgramName returns the Probe's program (function) name following the BCC
+// convention: <kind>__<ksym_name>, eg. kprobe__nf_conntrack_free.
+func (p Probe) ProgramName() string {
+	return p.Kind + "__" + p.Name
+}
+
 // Probes is a list of kprobe/kretprobe entries present in the BPF program.
-type Probes []string
+type Probes []Probe
 
 // Kernel represents a kernel object.
 type Kernel struct {
