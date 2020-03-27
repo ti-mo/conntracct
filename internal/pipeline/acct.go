@@ -101,6 +101,9 @@ func (p *Pipeline) startAcct() error {
 		return errors.Wrap(err, "starting probe")
 	}
 
+	// Watch the accounting probe for errors.
+	go p.acctErrorWorker()
+
 	log.Info("Started accounting probe and workers")
 
 	return nil
@@ -158,5 +161,22 @@ func (p *Pipeline) acctDestroyWorker() {
 			}
 		}
 		p.acctSinkMu.RUnlock()
+	}
+}
+
+// acctErrorWorker reads from acctProbe's error channel and terminates the
+// program when an error occurs.
+func (p *Pipeline) acctErrorWorker() {
+
+	errs := p.acctProbe.ErrChan()
+
+	for {
+		err, ok := <-errs
+		if !ok {
+			log.Debug("Pipeline's error event channel closed, stopping worker.")
+			break
+		}
+
+		log.Fatalln("Fatal error in acctProbe:", err)
 	}
 }

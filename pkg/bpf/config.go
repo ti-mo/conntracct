@@ -2,11 +2,8 @@ package bpf
 
 import (
 	"time"
-	"unsafe"
 
 	"github.com/pkg/errors"
-
-	"github.com/ti-mo/gobpf/elf"
 )
 
 var (
@@ -33,12 +30,12 @@ type CurvePoint struct {
 }
 
 const (
-	bpfAny     = 0    // BPF_ANY
-	readyValue = 0x90 // Go!
+	readyValue = uint64(0x90) // Go!
 )
 
 // configOffset represents an offset in the probe's `config` BPF array.
-type configOffset uint8
+// Needs to be a 4 bytes long to be able to be used as a map key.
+type configOffset uint32
 
 // Enum of indices in the probe's `config` BPF array.
 const (
@@ -46,7 +43,8 @@ const (
 )
 
 // curveOffset represents an offset in the probe's `curve` BPF array.
-type curveOffset uint8
+// Needs to be a 4 bytes long to be able to be used as a map key.
+type curveOffset uint32
 
 // Enum of indices in the probe's `curve` BPF array.
 const (
@@ -58,8 +56,12 @@ const (
 	curve2Rate
 )
 
-// configureProbe sets configuration values in the probe's config map.
-func configureProbe(mod *elf.Module, cfg Config) error {
+// configure sets configuration values in the probe's config map.
+func (ap *Probe) configure(cfg Config) error {
+
+	if ap.collection == nil {
+		panic("nil eBPF collection in probe")
+	}
 
 	// Set sane defaults on the configuration structure.
 	cfg.probeDefaults()
@@ -68,42 +70,42 @@ func configureProbe(mod *elf.Module, cfg Config) error {
 		return errors.Wrap(err, "verifying probe configuration")
 	}
 
-	configMap := mod.Map("config")
-	curveMap := mod.Map("config_ratecurve")
+	configMap, ok := ap.collection.Maps["config"]
+	if !ok {
+		return errors.New("map 'config' not found in eBPF collection")
+	}
 
-	k, v := curve0Age, cfg.Curve0.Age.Nanoseconds()
-	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
+	curveMap, ok := ap.collection.Maps["config_ratecurve"]
+	if !ok {
+		return errors.New("map 'config_ratecurve' not found in eBPF collection")
+	}
+
+	if err := curveMap.Put(curve0Age, cfg.Curve0.Age.Nanoseconds()); err != nil {
 		return errors.Wrap(err, "Curve0Age in config_ratecurve")
 	}
 
-	k, v = curve0Rate, cfg.Curve0.Rate.Nanoseconds()
-	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
+	if err := curveMap.Put(curve0Rate, cfg.Curve0.Rate.Nanoseconds()); err != nil {
 		return errors.Wrap(err, "Curve0Rate in config_ratecurve")
 	}
 
-	k, v = curve1Age, cfg.Curve1.Age.Nanoseconds()
-	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
+	if err := curveMap.Put(curve1Age, cfg.Curve1.Age.Nanoseconds()); err != nil {
 		return errors.Wrap(err, "Curve1Age in config_ratecurve")
 	}
 
-	k, v = curve1Rate, cfg.Curve1.Rate.Nanoseconds()
-	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
+	if err := curveMap.Put(curve1Rate, cfg.Curve1.Rate.Nanoseconds()); err != nil {
 		return errors.Wrap(err, "Curve1Rate in config_ratecurve")
 	}
 
-	k, v = curve2Age, cfg.Curve2.Age.Nanoseconds()
-	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
+	if err := curveMap.Put(curve2Age, cfg.Curve2.Age.Nanoseconds()); err != nil {
 		return errors.Wrap(err, "Curve2Age in config_ratecurve")
 	}
 
-	k, v = curve2Rate, cfg.Curve2.Rate.Nanoseconds()
-	if err := mod.UpdateElement(curveMap, unsafe.Pointer(&k), unsafe.Pointer(&v), bpfAny); err != nil {
+	if err := curveMap.Put(curve2Rate, cfg.Curve2.Rate.Nanoseconds()); err != nil {
 		return errors.Wrap(err, "Curve2Rate in config_ratecurve")
 	}
 
 	// Set the ready bit in the probe's config map to make it start sending traffic.
-	cfgKey, v := configReady, readyValue
-	if err := mod.UpdateElement(configMap, unsafe.Pointer(&cfgKey), unsafe.Pointer(&v), bpfAny); err != nil {
+	if err := configMap.Put(configReady, readyValue); err != nil {
 		return errors.Wrap(err, "configReady in config")
 	}
 
