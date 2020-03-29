@@ -2,24 +2,35 @@
 
 Conntracct is a tool for extracting network flow information from Linux hosts,
 firewalls, gateways, container or virtualization hosts, even mid- to high-end
-embedded devices. It does not capture or analyze packets in any way, but hooks
-into Conntrack's accounting (acct) subsystem using eBPF to obtain packet/byte
-counters, minimizing overhead.
+embedded devices.
+
+It does not capture or analyze packets in any way, but hooks into Conntrack's
+accounting subsystem using eBPF with minimal overhead.
 
 ---
 
 ## Overview
 
-Conntracct is built around a real-time metrics pipeline that supports one or
-more time-series sinks to be attached. This allows for sending real-time
-packet/byte counters to eg. InfluxDB, where they can be queried for a live
-visualization.
+Conntracct contains a metrics pipeline that supports shipping packet/byte
+counters for individial network flows to backends like InfluxDB and
+ElasticSearch, where they can be queried and visualized in real time.
 
-The project aims to support unmodified kernels of most major distributions
-that are Linux 4.9 or higher. No compatibility matrix yet, but some versions of
-Fedora and Arch up to kernels 4.19 have been tested.
+## Compatibility
 
-No flashy tech demo yet, Coming Soon. (tm)
+The following major distributions are supported:
+
+- Debian
+    - Stretch
+    - Buster
+- Ubuntu
+    - Bionic
+- Fedora
+- Arch Linux
+
+The minimum required kernel version is 4.9. For distributions with rolling
+releases, breakage is expected as the kernel's internal data structures evolve
+over time. Please create an issue if you encounter any issues running the
+project on rolling distributions.
 
 ## Roadmap
 
@@ -36,7 +47,7 @@ This is a small list of features that are planned to
 - [ ] `conntracct test` subcommand to ship eBPF test suite with the binary
 - [ ] ARMv7 (aarch64) support (Odroid XU3/4+, RPi 3+, etc.)
 - [ ] Easy build procedure for targeting a single custom kernel
-- [ ] Pure-go eBPF implementation without Cgo (https://github.com/newtools/ebpf)
+- [x] Pure-go eBPF implementation without Cgo (https://github.com/cilium/ebpf)
 
 ## Installing
 
