@@ -1,7 +1,7 @@
 #include <linux/kconfig.h>
 #include "bpf_helpers.h"
 
-#define KBUILD_MODNAME "empty" // Required for including printk.h
+#define _LINUX_BLKDEV_H // calls macros that contain inline asm, which BPF doesn't support
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_acct.h>
 #include <net/netfilter/nf_conntrack_timestamp.h>
@@ -102,10 +102,10 @@ struct bpf_map_def SEC("maps/config_ratecurve") config_ratecurve = {
 // probe_ready reads the `config` array map for the Ready flag.
 // It returns true if the Ready flag is set to 0x90 (go).
 static __inline bool probe_ready() {
-  
+
   u64 oc_ready = ConfigReady;
   u64 *rp = bpf_map_lookup_elem(&config, &oc_ready);
-  
+
   return (rp && *rp == ready_val);
 }
 
@@ -183,9 +183,9 @@ static __inline int extract_tstamp(struct acct_event_t *data, struct nf_conn *ct
   struct nf_conn_tstamp *ts_ext = 0;
   if (get_ts_ext(&ts_ext, ct))
     return -1;
-  
+
   bpf_probe_read(&data->start, sizeof(data->start), &ts_ext->start);
-  
+
   return 0;
 }
 
@@ -225,7 +225,7 @@ static __inline void extract_netns(struct acct_event_t *data, struct nf_conn *ct
 // curve_get returns an entry from the curve array as a signed 64-bit integer.
 // Returns negative if an entry was not found at the requested index.
 static __inline s64 curve_get(enum o_config_ratecurve curve_enum) {
-  
+
   int offset = curve_enum;
   u64 *confp = bpf_map_lookup_elem(&config_ratecurve, &offset);
   if (confp)
@@ -257,7 +257,7 @@ static __inline u64 flow_initialize_origin(struct nf_conn *ct, u64 ts, u64 pkts_
 
   u64 origin = ts;
 
-  // pkts_total is evaluated to account for flows that existed before 
+  // pkts_total is evaluated to account for flows that existed before
   if (pkts_total < 2)
     goto update;
 
@@ -431,7 +431,7 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
 
   // Submit event to userspace.
-  bpf_perf_event_output(ctx, &perf_acct_update, CUR_CPU_IDENTIFIER, &data, sizeof(data));
+  bpf_perf_event_output(ctx, &perf_acct_update, BPF_F_CURRENT_CPU, &data, sizeof(data));
 
   return 0;
 }
@@ -464,7 +464,7 @@ int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
   extract_tstamp(&data, ct);
   bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
 
-  bpf_perf_event_output(ctx, &perf_acct_end, CUR_CPU_IDENTIFIER, &data, sizeof(data));
+  bpf_perf_event_output(ctx, &perf_acct_end, BPF_F_CURRENT_CPU, &data, sizeof(data));
 
   return 0;
 }
