@@ -44,6 +44,9 @@ type Probe struct {
 	updateReader  *perf.Reader
 	destroyReader *perf.Reader
 
+	// File descriptors of perf events opened for this probe.
+	perfEventFds []int
+
 	// Target kernel of the loaded probe.
 	kernel kernel.Kernel
 
@@ -171,9 +174,28 @@ func openTraceEvent(group, kind, symbol string) (int, error) {
 	return tid, nil
 }
 
+// closeTraceEvents closes all trace events (kprobe_events) of the Probe.
+func (ap *Probe) closeTraceEvents() error {
+
+	f, err := os.OpenFile(traceEventsPath, os.O_APPEND|os.O_WRONLY, 0666)
+	if err != nil {
+		return fmt.Errorf("cannot open %s: %v", traceEventsPath, err)
+	}
+	defer f.Close()
+
+	for _, p := range ap.kernel.Probes {
+		pe := fmt.Sprintf("-:%s/%s", probeGroup(), probeName(p.Kind, p.Name))
+		if _, err = f.WriteString(pe); err != nil {
+			return fmt.Errorf("writing %q to kprobe_events: %v", pe, err)
+		}
+	}
+
+	return nil
+}
+
 // perfEventOpenAttach creates a new perf event on tracepoint tid and binds a
 // BPF program's progFd to it.
-func perfEventOpenAttach(tid int, progFd int) (int, error) {
+func (ap *Probe) perfEventOpenAttach(tid int, progFd int) error {
 
 	attrs := &unix.PerfEventAttr{
 		Type:        unix.PERF_TYPE_TRACEPOINT,
@@ -187,26 +209,35 @@ func perfEventOpenAttach(tid int, progFd int) (int, error) {
 	// (kernel symbol) is hit.
 	efd, err := unix.PerfEventOpen(attrs, -1, 0, -1, unix.PERF_FLAG_FD_CLOEXEC)
 	if err != nil {
-		return 0, fmt.Errorf("perf_event_open error: %v", err)
+		return fmt.Errorf("perf_event_open error: %v", err)
 	}
 
 	// Enable the perf event.
 	if err := unix.IoctlSetInt(efd, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
-		return 0, fmt.Errorf("enabling perf event: %v", err)
+		return fmt.Errorf("enabling perf event: %v", err)
 	}
 
 	// Set the BPF program to execute each time the perf event fires.
 	if err := unix.IoctlSetInt(efd, unix.PERF_EVENT_IOC_SET_BPF, progFd); err != nil {
-		return 0, fmt.Errorf("attaching bpf program to perf event: %v", err)
+		return fmt.Errorf("attaching bpf program to perf event: %v", err)
 	}
 
-	return efd, nil
+	// Store the FD for later teardown.
+	ap.perfEventFds = append(ap.perfEventFds, efd)
+
+	return nil
 }
 
-// perfEventDisable disables the perf event efd.
-func perfEventDisable(efd int) error {
-	if err := unix.IoctlSetInt(efd, unix.PERF_EVENT_IOC_DISABLE, 0); err != nil {
-		return fmt.Errorf("disabling perf event: %v", err)
+// perfEventDisable disables and closes all perf event efds stored in the Probe.
+func (ap *Probe) disablePerfEvents() error {
+	for _, efd := range ap.perfEventFds {
+		if err := unix.IoctlSetInt(efd, unix.PERF_EVENT_IOC_DISABLE, 0); err != nil {
+			return fmt.Errorf("disabling perf event: %v", err)
+		}
+
+		if err := unix.Close(efd); err != nil {
+			return fmt.Errorf("closing perf event fd: %v", err)
+		}
 	}
 	return nil
 }
@@ -237,7 +268,7 @@ func (ap *Probe) Start() error {
 
 		// Create a perf event using the trace event opened above, and attach
 		// a BPF program to it.
-		if _, err := perfEventOpenAttach(tid, prog.FD()); err != nil {
+		if err := ap.perfEventOpenAttach(tid, prog.FD()); err != nil {
 			return fmt.Errorf("opening perf event: %v", err)
 		}
 	}
@@ -286,11 +317,18 @@ func (ap *Probe) Stop() error {
 		return err
 	}
 
-	// TODO: Disable perf events.
-	// TODO: Clean up tracepoints.
-
 	close(ap.lost)
 	close(ap.errs)
+
+	if err := ap.disablePerfEvents(); err != nil {
+		return err
+	}
+
+	if err := ap.closeTraceEvents(); err != nil {
+		return err
+	}
+
+	ap.collection.Close()
 
 	return nil
 }
