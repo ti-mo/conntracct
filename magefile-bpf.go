@@ -35,20 +35,25 @@ func (Bpf) Clean() error {
 		return err
 	}
 
+	fmt.Println("Removing kernel configurations ..")
 	for _, k := range kernel.Builds {
 		p := path.Join(k.Directory(), ".config")
-		fmt.Println("Removing", p, "..")
+		if mg.Verbose() {
+			fmt.Println("Removing", p, "..")
+		}
 		if err := os.RemoveAll(p); err != nil {
 			return err
 		}
 	}
 
-	fmt.Println("So fresh, so clean.")
 	return nil
 }
 
 // Build builds all BPF programs against all defined kernels.
 func (Bpf) Build() error {
+
+	// Download and extract all kernels first.
+	mg.Deps(Bpf.Kernels)
 
 	// Basic check for build dependencies to avoid ugly errors.
 	buildTools := []string{"clang", "llc", "statik"}
@@ -63,6 +68,8 @@ func (Bpf) Build() error {
 	if err := os.MkdirAll(bpfAcctBuildPath, os.ModePerm); err != nil {
 		return err
 	}
+
+	fmt.Println("Building eBPF programs ..")
 
 	// Build the acct probe against all Kernels defined in the kernel package.
 	for _, k := range kernel.Builds {
@@ -85,9 +92,6 @@ func (Bpf) Build() error {
 			continue
 		}
 
-		// Download and extract all kernels first.
-		mg.Deps(Bpf.Kernels)
-
 		if err := buildProbe(bpfAcctProbe, bpfObjectPath, k.Directory()); err != nil {
 			fmt.Println("Failed to build probe against kernel", k.Version)
 			return err
@@ -107,6 +111,8 @@ func (Bpf) Build() error {
 
 // Kernels downloads and extracts a list of kernels to a temporary directory.
 func (Bpf) Kernels() error {
+
+	fmt.Println("Fetching and configuring kernels ..")
 
 	var eg errgroup.Group
 
@@ -139,29 +145,31 @@ func (Bpf) Kernels() error {
 
 // buildProbe builds a BPF program given its source file, destination object file
 // and directory of the kernel source tree the program is to be built against.
-func buildProbe(srcFile, destObj, kernelDir string) error {
+func buildProbe(srcFile, dstObj, kernelDir string) error {
 
 	clangParams := []string{
 		"-D__KERNEL__", "-D__BPF_TRACING__",
+		"-D__TARGET_ARCH_x86",
 		"-fno-stack-protector",
-		"-Wno-address-of-packed-member",
-		"-Wno-gnu-variable-sized-type-not-at-end",
-		"-Wno-unused-value",
 		"-Wno-pointer-sign",
-		"-Wno-compare-distinct-pointer-types",
+		"-Wno-gnu-variable-sized-type-not-at-end",
+		"-Wno-address-of-packed-member",
 		"-Wunused", "-Wall", "-Werror",
 		"-O2", "-emit-llvm", "-ferror-limit=1",
-		"-c", srcFile, // Input file
-		"-o", "-", // Output to stdout
+		"-S",
+		"-c", srcFile,
+		"-o", "-",
 	}
 
+	// Specify all include dirs to prevent clang from falling back to includes
+	// on the machine in /usr/include during cross-compilation.
 	kdirs := []string{
 		"-I%s/include",
 		"-I%s/include/uapi",
 		"-I%s/arch/x86/include",
+		"-I%s/arch/x86/include/uapi",
 		"-I%s/arch/x86/include/generated",
-		// "-I%s/arch/x86/include/uapi",
-		// "-I%s/include/generated/uapi",
+		"-I%s/arch/x86/include/generated/uapi",
 	}
 
 	// Resolve kernel directories in all include paths and append to clang params.
@@ -172,7 +180,7 @@ func buildProbe(srcFile, destObj, kernelDir string) error {
 	llcParams := []string{
 		"-march=bpf",
 		"-filetype=obj",
-		"-o", destObj,
+		"-o", dstObj,
 	}
 
 	clang := exec.Command("clang", clangParams...)
