@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/ti-mo/conntracct/pkg/kallsyms"
+	"github.com/ti-mo/conntracct/pkg/kernel"
 )
 
 // kernelRelease returns the release name of the running kernel.
@@ -37,7 +37,7 @@ func kernelRelease() (string, error) {
 
 // checkProbeKsyms checks whether a list of k(ret)probes have their target functions
 // present in the kernel. Expects strings in the format of k(ret)probe/<kernel-symbol>.
-func checkProbeKsyms(probes []string) error {
+func checkProbeKsyms(probes kernel.Probes) error {
 
 	// Parse /proc/kallsyms and store result in kallsyms package.
 	err := kallsyms.Refresh()
@@ -46,20 +46,13 @@ func checkProbeKsyms(probes []string) error {
 	}
 
 	for _, p := range probes {
-		ps := strings.Split(p, "/")
-		if len(ps) != 2 {
-			return fmt.Errorf(errFmtSplitKprobe, p)
-		}
-
-		sym := ps[1]
-
-		sf, err := kallsyms.Find(sym)
+		sf, err := kallsyms.Find(p.Name)
 		if err != nil {
 			return err
 		}
 
 		if !sf {
-			return fmt.Errorf(errFmtSymNotFound, sym)
+			return fmt.Errorf(errFmtSymNotFound, p.Name)
 		}
 	}
 

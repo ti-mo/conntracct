@@ -45,7 +45,7 @@ type Event struct {
 func (e *Event) unmarshalBinary(b []byte) error {
 
 	if len(b) != EventLength {
-		return fmt.Errorf("input byte array incorrect length %d", len(b))
+		return fmt.Errorf("input byte array incorrect length %d (expected %d)", len(b), EventLength)
 	}
 
 	e.Start = *(*uint64)(unsafe.Pointer(&b[0]))
@@ -74,14 +74,14 @@ func (e *Event) unmarshalBinary(b []byte) error {
 	e.PacketsRet = *(*uint64)(unsafe.Pointer(&b[72]))
 	e.BytesRet = *(*uint64)(unsafe.Pointer(&b[80]))
 
+	e.NetNS = *(*uint32)(unsafe.Pointer(&b[92]))
+
 	// Only extract ports for UDP and TCP.
 	e.Proto = b[96]
 	if e.Proto == 6 || e.Proto == 17 {
 		e.SrcPort = binary.BigEndian.Uint16(b[88:90])
 		e.DstPort = binary.BigEndian.Uint16(b[90:92])
 	}
-
-	e.NetNS = *(*uint32)(unsafe.Pointer(&b[92]))
 
 	// Generate and set the Event's FlowID.
 	e.FlowID = e.hashFlow()

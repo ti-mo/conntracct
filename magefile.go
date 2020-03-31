@@ -17,7 +17,14 @@ const (
 )
 
 var (
-	build      = sh.RunCmd("go", "build", "-o", buildPath)
+	buildEnv = map[string]string{
+		"CGO_ENABLED": "0",
+	}
+
+	build = func() error {
+		return sh.RunWith(buildEnv, "go", "build", "-o", buildPath)
+	}
+
 	goreleaser = sh.RunCmd("goreleaser", "release", "--rm-dist")
 )
 
