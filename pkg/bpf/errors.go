@@ -3,7 +3,6 @@ package bpf
 import "errors"
 
 const (
-	errFmtSplitKprobe = "expected string of format 'k(ret)probe/<kernel-symbol>': %s"
 	errFmtSymNotFound = "kernel symbol '%s' not found, conntrack kernel module not loaded"
 	errKernelRelease  = "invalid kernel release version '%s'"
 )
