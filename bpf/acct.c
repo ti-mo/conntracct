@@ -58,7 +58,7 @@ struct bpf_map_def SEC("maps/flow_cooldown") flow_cooldown = {
   .type = BPF_MAP_TYPE_HASH,
   .key_size = sizeof(u64),
   .value_size = sizeof(u64),
-  .max_entries = 512000,
+  .max_entries = 65535,
 };
 
 // Hash that holds a timestamp per flow indicating when the flow
@@ -67,7 +67,7 @@ struct bpf_map_def SEC("maps/flow_origin") flow_origin = {
   .type = BPF_MAP_TYPE_HASH,
   .key_size = sizeof(struct nf_conn *),
   .value_size = sizeof(u64),
-  .max_entries = 512000,
+  .max_entries = 65535,
 };
 
 // Communication channel between the kprobe and the kretprobe.
