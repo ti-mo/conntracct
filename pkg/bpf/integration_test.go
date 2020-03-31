@@ -76,7 +76,6 @@ func TestMain(m *testing.M) {
 	if err := acctProbe.Start(); err != nil {
 		log.Fatal(err)
 	}
-	go errWorker(acctProbe.ErrChan())
 
 	// Run tests, save the return code.
 	rc := m.Run()
@@ -322,14 +321,6 @@ func filterWorker(in <-chan Event, out chan<- Event, f func(Event) bool) {
 		if f(ev) {
 			out <- ev
 		}
-	}
-}
-
-// errWorker listens for errors on the Probe's error channel.
-// Terminates the test suite when an error occurs.
-func errWorker(ec <-chan error) {
-	for err := range ec {
-		log.Fatal("unexpected error from Probe:", err)
 	}
 }
 

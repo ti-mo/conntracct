@@ -57,9 +57,6 @@ type Probe struct {
 	// Channel for receiving IDs of lost perf events.
 	lost chan uint64
 
-	// perfWorker error channel.
-	errs chan error
-
 	// Started status of the probe.
 	startMu sync.Mutex
 	started bool
@@ -274,7 +271,6 @@ func (ap *Probe) Start() error {
 	}
 
 	ap.lost = make(chan uint64)
-	ap.errs = make(chan error)
 
 	// Set up Readers for reading events from the perf ring buffers.
 	r, err := perf.NewReader(ap.collection.Maps[perfUpdateMap], 4096)
@@ -318,7 +314,6 @@ func (ap *Probe) Stop() error {
 	}
 
 	close(ap.lost)
-	close(ap.errs)
 
 	if err := ap.disablePerfEvents(); err != nil {
 		return err
@@ -338,30 +333,9 @@ func (ap *Probe) Kernel() kernel.Kernel {
 	return ap.kernel
 }
 
-// ErrChan returns an initialized Probe's unbuffered error channel.
-// The error channel is unbuffered because it doesn't make sense to have
-// stale error data. If there is no ready consumer on the channel, errors
-// are dropped.
-// Returns nil if the Probe has not been Start()ed yet.
-func (ap *Probe) ErrChan() chan error {
-	return ap.errs
-}
-
 // Stats returns a snapshot copy of the Probe's statistics.
 func (ap *Probe) Stats() ProbeStats {
 	return ap.stats.Get()
-}
-
-// sendError safely sends a message on the Probe's unbuffered errChan.
-// If there is no ready channel receiver, sendError is a no-op. A return value
-// of true means the error was successfully sent on the channel.
-func (ap *Probe) sendError(err error) bool {
-	select {
-	case ap.errs <- err:
-		return true
-	default:
-		return false
-	}
 }
 
 // updateWorker reads binady flow update events from the Probe's ring buffer,
@@ -389,8 +363,7 @@ func (ap *Probe) updateWorker() {
 
 		var ae Event
 		if err := ae.unmarshalBinary(rec.RawSample); err != nil {
-			ap.sendError(errors.Wrap(err, "error unmarshaling Event byte array"))
-			continue
+			panic(err)
 		}
 
 		// Fan out update event to all registered consumers.
@@ -423,8 +396,7 @@ func (ap *Probe) destroyWorker() {
 
 		var ae Event
 		if err := ae.unmarshalBinary(rec.RawSample); err != nil {
-			ap.sendError(errors.Wrap(err, "error unmarshaling Event byte array"))
-			continue
+			panic(err)
 		}
 
 		// Fan out destroy event to all registered consumers.
