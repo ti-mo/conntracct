@@ -1,6 +1,7 @@
 package bpf
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
 	"io/ioutil"
@@ -76,7 +77,7 @@ func NewProbe(cfg Config) (*Probe, error) {
 	// Select the correct BPF probe from the library.
 	br, k, err := Select(kr)
 	if err != nil {
-		return nil, errors.Wrap(err, "selecting BPF probe")
+		return nil, errors.Wrap(err, "selecting probe version")
 	}
 
 	// Instantiate Probe with selected target kernel struct.
@@ -86,28 +87,36 @@ func NewProbe(cfg Config) (*Probe, error) {
 	}
 
 	// Scan kallsyms before attempting BPF load to avoid arcane error output from eBPF attach.
-	err = checkProbeKsyms(k.Probes)
-	if err != nil {
+	if err := checkProbeKsyms(k.Probes); err != nil {
 		return nil, err
 	}
 
+	if err := ap.load(br); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("loading probe %s", k.Version))
+	}
+
+	// Apply probe configuration.
+	if err := ap.configure(cfg); err != nil {
+		return nil, errors.Wrap(err, "configuring probe")
+	}
+
+	return &ap, nil
+}
+
+func (ap *Probe) load(br *bytes.Reader) error {
+
 	spec, err := ebpf.LoadCollectionSpecFromReader(br)
 	if err != nil {
-		return nil, errors.Wrap(err, "loading collection spec")
+		return errors.Wrap(err, "loading collection spec")
 	}
 
 	coll, err := ebpf.NewCollection(spec)
 	if err != nil {
-		return nil, errors.Wrap(err, "creating collection")
+		return errors.Wrap(err, "creating collection")
 	}
 	ap.collection = coll
 
-	// Apply probe configuration.
-	if err := ap.configure(cfg); err != nil {
-		return nil, errors.Wrap(err, "configuring BPF probe")
-	}
-
-	return &ap, nil
+	return nil
 }
 
 func probeName(kind, symbol string) string {
