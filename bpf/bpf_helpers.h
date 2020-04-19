@@ -7,6 +7,11 @@
  */
 #undef CONFIG_CC_HAS_ASM_INLINE
 
+// clang doesn't support '.syntax unified', so skip including asm/unified.h.
+// This was introduced somewhere before 4.19 and later fixed:
+// https://lkml.org/lkml/2019/8/29/1669.
+#define __ASM_UNIFIED_H
+
 #include <linux/bpf.h>
 
 /* helper macro to place programs, maps, license in
@@ -14,13 +19,6 @@
  * are interpreted by elf_bpf loader
  */
 #define SEC(NAME) __attribute__((section(NAME), used))
-
-// Identifier for current CPU used in perf_submit and perf_read
-// Prefer BPF_F_CURRENT_CPU flag, falls back to call helper for older kernel
-// Can be overridden from BCC
-#ifndef CUR_CPU_IDENTIFIER
-#define CUR_CPU_IDENTIFIER BPF_F_CURRENT_CPU
-#endif
 
 /* helper functions called from eBPF programs written in C */
 static void *(*bpf_map_lookup_elem)(void *map, void *key) =
@@ -61,17 +59,6 @@ static int (*bpf_skb_set_tunnel_key)(void *ctx, void *key, int size, int flags) 
 static unsigned long long (*bpf_get_prandom_u32)(void) =
 	(void *) BPF_FUNC_get_prandom_u32;
 
-/* llvm builtin functions that eBPF C program may use to
- * emit BPF_LD_ABS and BPF_LD_IND instructions
- */
-struct sk_buff;
-unsigned long long load_byte(void *skb,
-			     unsigned long long off) asm("llvm.bpf.load.byte");
-unsigned long long load_half(void *skb,
-			     unsigned long long off) asm("llvm.bpf.load.half");
-unsigned long long load_word(void *skb,
-			     unsigned long long off) asm("llvm.bpf.load.word");
-
 /* a helper structure used by eBPF C program
  * to describe map attributes to elf_bpf loader
  */
@@ -87,14 +74,7 @@ struct bpf_map_def {
 	char namespace[BUF_SIZE_MAP_NS];
 };
 
-static int (*bpf_skb_store_bytes)(void *ctx, int off, void *from, int len, int flags) =
-	(void *) BPF_FUNC_skb_store_bytes;
-static int (*bpf_l3_csum_replace)(void *ctx, int off, int from, int to, int flags) =
-	(void *) BPF_FUNC_l3_csum_replace;
-static int (*bpf_l4_csum_replace)(void *ctx, int off, int from, int to, int flags) =
-	(void *) BPF_FUNC_l4_csum_replace;
-
-#if defined(__x86_64__)
+#if defined(__TARGET_ARCH_x86)
 
 #define PT_REGS_PARM1(x) ((x)->di)
 #define PT_REGS_PARM2(x) ((x)->si)
@@ -107,7 +87,7 @@ static int (*bpf_l4_csum_replace)(void *ctx, int off, int from, int to, int flag
 #define PT_REGS_SP(x) ((x)->sp)
 #define PT_REGS_IP(x) ((x)->ip)
 
-#elif defined(__arm__)
+#elif defined(__TARGET_ARCH_arm)
 
 #define PT_REGS_PARM1(x) ((x)->uregs[0])
 #define PT_REGS_PARM2(x) ((x)->uregs[1])
@@ -120,7 +100,7 @@ static int (*bpf_l4_csum_replace)(void *ctx, int off, int from, int to, int flag
 #define PT_REGS_SP(x) ((x)->uregs[13])
 #define PT_REGS_IP(x) ((x)->uregs[12])
 
-#elif defined(__aarch64__)
+#elif defined(__TARGET_ARCH_arm64)
 
 #define PT_REGS_PARM1(x) ((x)->regs[0])
 #define PT_REGS_PARM2(x) ((x)->regs[1])
@@ -135,9 +115,4 @@ static int (*bpf_l4_csum_replace)(void *ctx, int off, int from, int to, int flag
 
 #endif
 
-#define BPF_KPROBE_READ_RET_IP(ip, ctx)		({				\
-		bpf_probe_read(&(ip), sizeof(ip), (void *)PT_REGS_RET(ctx)); })
-#define BPF_KRETPROBE_READ_RET_IP(ip, ctx)	({				\
-		bpf_probe_read(&(ip), sizeof(ip),				\
-				(void *)(PT_REGS_FP(ctx) + sizeof(ip))); })
 #endif

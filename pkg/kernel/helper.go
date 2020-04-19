@@ -15,10 +15,13 @@ func curl(url, filePath string) error {
 
 	// Skip if destination path already exists.
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		if mg.Verbose() {
-			fmt.Printf("Downloading %s to %s..\n", url, filePath)
+		fmt.Printf("Downloading %s to %s..\n", url, filePath)
+
+		if err := sh.Run("curl", "-s", "-L", url, "-o", filePath+".tmp"); err != nil {
+			return err
 		}
-		if err := sh.Run("curl", "-L", url, "-o", filePath); err != nil {
+
+		if err := sh.Run("mv", filePath+".tmp", filePath); err != nil {
 			return err
 		}
 	} else if mg.Verbose() {

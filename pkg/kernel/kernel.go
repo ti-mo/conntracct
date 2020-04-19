@@ -1,9 +1,12 @@
 package kernel
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
@@ -86,6 +89,11 @@ func (k Kernel) Fetch() error {
 // If params is nil, the parameters defined on the Kernel will be used.
 func (k Kernel) Configure(params Params) error {
 
+	e := map[string]string{
+		"ARCH": "x86",
+		// "CROSS_COMPILE": "arm-linux-gnueabi-",
+	}
+
 	if mg.Verbose() {
 		fmt.Println("Configuring", k.Name(), "..")
 	}
@@ -93,7 +101,9 @@ func (k Kernel) Configure(params Params) error {
 	kcfile := path.Join(k.Directory(), ".config")
 
 	// Initialize the default configuration to '.config'.
-	if err := sh.Run("make", "-C", k.Directory(), "defconfig"); err != nil {
+	// Include the 'clean' target to make sure all generated/prepared headers
+	// from previous runs are erased.
+	if err := runWithQuiet(e, "make", "-C", k.Directory(), "clean", "defconfig"); err != nil {
 		return err
 	}
 
@@ -113,7 +123,7 @@ func (k Kernel) Configure(params Params) error {
 	}
 
 	// Prepare kernel headers.
-	if err := sh.Run("make", "-C", k.Directory(), "olddefconfig", "prepare"); err != nil {
+	if err := runWithQuiet(e, "make", "-C", k.Directory(), "olddefconfig", "prepare"); err != nil {
 		return err
 	}
 
@@ -122,4 +132,21 @@ func (k Kernel) Configure(params Params) error {
 	}
 
 	return nil
+}
+
+// runWithQuiet calls sh.RunWith, but buffers stderr and only displays it when
+// the command failed.
+func runWithQuiet(env map[string]string, cmd string, args ...string) error {
+	var output io.Writer
+	if mg.Verbose() {
+		output = os.Stdout
+	}
+	errBuf := &bytes.Buffer{}
+	_, err := sh.Exec(env, output, errBuf, cmd, args...)
+
+	if err != nil {
+		fmt.Println(strings.TrimSuffix(errBuf.String(), "\n"))
+	}
+
+	return err
 }
