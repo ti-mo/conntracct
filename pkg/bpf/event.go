@@ -37,7 +37,7 @@ type Event struct {
 	NetNS       uint32 `json:"netns"`
 	Proto       uint8  `json:"proto"`
 
-	connectionID uint32
+	connPtr uint64
 }
 
 // unmarshalBinary unmarshals a slice of bytes received from the
@@ -50,8 +50,7 @@ func (e *Event) unmarshalBinary(b []byte) error {
 
 	e.Start = *(*uint64)(unsafe.Pointer(&b[0]))
 	e.Timestamp = *(*uint64)(unsafe.Pointer(&b[8]))
-	e.connectionID = *(*uint32)(unsafe.Pointer(&b[16]))
-	e.Connmark = *(*uint32)(unsafe.Pointer(&b[20]))
+	e.connPtr = *(*uint64)(unsafe.Pointer(&b[16]))
 
 	// Build an IPv4 address if only the first four bytes
 	// of the nf_inet_addr union are filled.
@@ -74,13 +73,14 @@ func (e *Event) unmarshalBinary(b []byte) error {
 	e.PacketsRet = *(*uint64)(unsafe.Pointer(&b[72]))
 	e.BytesRet = *(*uint64)(unsafe.Pointer(&b[80]))
 
+	e.Connmark = *(*uint32)(unsafe.Pointer(&b[88]))
 	e.NetNS = *(*uint32)(unsafe.Pointer(&b[92]))
 
 	// Only extract ports for UDP and TCP.
-	e.Proto = b[96]
+	e.Proto = b[100]
 	if e.Proto == 6 || e.Proto == 17 {
-		e.SrcPort = binary.BigEndian.Uint16(b[88:90])
-		e.DstPort = binary.BigEndian.Uint16(b[90:92])
+		e.SrcPort = binary.BigEndian.Uint16(b[96:98])
+		e.DstPort = binary.BigEndian.Uint16(b[98:100])
 	}
 
 	// Generate and set the Event's FlowID.
@@ -113,10 +113,9 @@ func (e *Event) hashFlow() uint32 {
 	// Protocol.
 	_, _ = h.Write([]byte{e.Proto})
 
-	b = make([]byte, 4)
-
-	// Connection ID.
-	binary.BigEndian.PutUint32(b, e.connectionID)
+	// nf_conn struct kernel pointer.
+	b = make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, e.connPtr)
 	_, _ = h.Write(b)
 
 	// Calculate the hash.
