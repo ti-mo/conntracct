@@ -312,8 +312,6 @@ github.com/stretchr/testify v1.2.2 h1:bSDNvY7ZPG5RlJ8otE/7V6gMiyenm9RtJ7IUVIAoJ1
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/tcnksm/go-input v0.0.0-20180404061846-548a7d7a8ee8/go.mod h1:IlWNj9v/13q7xFbaK4mbyzMNwrZLaWSHx/aibKIZuIg=
 github.com/testcontainers/testcontainer-go v0.0.0-20181115231424-8e868ca12c0f/go.mod h1:SrG3IY071gtmZJjGbKO+POJ57a/MMESerYNWt6ZRtKs=
-github.com/ti-mo/ebpf v0.0.0-20200329172224-d4cb7342e230 h1:7nXADlkIlhuHA3kT+5B/n9CdeGADaOWxr4dSzig/RcY=
-github.com/ti-mo/ebpf v0.0.0-20200329172224-d4cb7342e230/go.mod h1:XT+cAw5wfvsodedcijoh1l9cf7v1x9FlFB/3VmF/O8s=
 github.com/ti-mo/ebpf v0.0.0-20200331133758-a258b0c67078 h1:nNOESbChqDV9JopTdrYznTrCEDpyO8tnh9V7Naf4C3Y=
 github.com/ti-mo/ebpf v0.0.0-20200331133758-a258b0c67078/go.mod h1:XT+cAw5wfvsodedcijoh1l9cf7v1x9FlFB/3VmF/O8s=
 github.com/ti-mo/kconfig v0.0.0-20181208153747-0708bf82969f h1:T7sfRIPh8vsabiYlogEpC+ydpskAyqNQMx/tkPsEgi4=
