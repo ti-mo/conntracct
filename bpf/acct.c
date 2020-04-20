@@ -9,17 +9,17 @@
 struct acct_event_t {
   u64 start;
   u64 ts;
-  u32 cid;
-  u32 connmark;
+  u64 cptr;
   union nf_inet_addr srcaddr;
   union nf_inet_addr dstaddr;
   u64 packets_orig;
   u64 bytes_orig;
   u64 packets_ret;
   u64 bytes_ret;
+  u32 connmark;
+  u32 netns;
   u16 srcport;
   u16 dstport;
-  u32 netns;
   u8 proto;
 };
 
@@ -390,7 +390,7 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   struct acct_event_t data = {
     .start = 0,
     .ts = ts,
-    .cid = (u32)ct,
+    .cptr = (u64)ct,
   };
 
   // Pull counters onto the BPF stack first, so that we can make event rate
@@ -452,7 +452,7 @@ int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
   struct acct_event_t data = {
     .start = 0,
     .ts = ts,
-    .cid = (u32)ct,
+    .cptr = (u64)ct,
   };
 
   // Ignore the event if the nf_conn doesn't contain counters.

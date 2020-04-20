@@ -43,12 +43,12 @@ sinks:
 
   elastic:
     type: elastic
-    address: "http://localhost:9200"  # comma-separated list of elasticsearch server URLs
-    # database: conntracct   # (default) index prefix (results in 'conntracct-YYYY.MM.DD')
-    # shards: 3              # (default) amount of shards to use for indices
-    # replicas: 0            # (default) amount of replicas to use for indices
-    # username: my-username  # basic HTTP auth username
-    # password: my-password  # basic HTTP auth password
+    address: "http://localhost:9200"   # comma-separated list of elasticsearch server URLs
+    # database: conntracct-<hostname>  # (default) index name
+    # shards: 3                        # (default) index into this many shards
+    # replicas: 0                      # (default) index into this many replicas
+    # username: my-username            # basic HTTP auth username
+    # password: my-password            # basic HTTP auth password
 
   stdout:
     type: stdout

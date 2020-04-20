@@ -13,8 +13,8 @@ import (
 // This structure is used to generate the JSON document
 // sent to elasticsearch.
 type event struct {
-	// Type of event, eg. 'update' or 'destroy'.
-	EventType string `json:"event_type"`
+	// State of the flow, eg. 'established' or 'finished'.
+	State string `json:"flow_state"`
 
 	// Hostname of the machine sending the event.
 	Hostname string `json:"hostname"`
@@ -36,13 +36,22 @@ func (s *ElasticSink) transformEvent(e *event) {
 	// TODO(timo): Allow the user to override the hostname.
 	e.Hostname, _ = os.Hostname()
 
-	// Convert the flow start timestamp to milliseconds.
+	// Apply boot time offset to the (relative) event timestamp, convert to milliseconds.
 	// Nanosecond-resolution unix timestamps cannot be ingested by elastic.
 	// https://github.com/elastic/elasticsearch/issues/43917
-	e.Start = e.Start / uint64(time.Millisecond)
-
-	// Apply boot time offset to the (relative) event timestamp, convert to milliseconds.
 	e.Timestamp = uint64(boottime.Absolute(int64(e.Timestamp)) / int64(time.Millisecond))
+
+	// Flows' start timestamps are only generated when the kernel marks them
+	// as 'CONFIRMED'. The first event will come with a zero start timestamp.
+	// For elastic, use the event's timestamp as an approximate start time
+	// since later events will upsert the actual start timestamp anyway.
+	// Under normal conditions, this should only be a couple microseconds off.
+	if e.Start == 0 {
+		e.Start = e.Timestamp
+	} else {
+		// Convert the flow start timestamp to milliseconds.
+		e.Start = e.Start / uint64(time.Millisecond)
+	}
 
 	// Calculated fields.
 	e.PacketsTotal = e.PacketsOrig + e.PacketsRet
