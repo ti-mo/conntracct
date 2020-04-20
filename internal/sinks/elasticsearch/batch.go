@@ -2,8 +2,7 @@ package elasticsearch
 
 import (
 	"context"
-	"fmt"
-	"time"
+	"strconv"
 
 	elastic "github.com/olivere/elastic/v7"
 	log "github.com/sirupsen/logrus"
@@ -68,16 +67,21 @@ func (s *ElasticSink) flushBatch() {
 // backend in a single bulk transaction.
 func (s *ElasticSink) sendBatch(b batch) {
 
-	// Append current date to the configured database name.
-	idx := fmt.Sprintf("%s-%s", s.config.Database, time.Now().Format("2006.01.02"))
-
 	// Create an elastic bulk request.
-	bulk := s.client.Bulk().Index(idx)
+	bulk := s.client.Bulk().Index(s.config.Database)
 
 	// Create index requests for each event in the batch.
 	reqs := make([]elastic.BulkableRequest, 0, len(b))
 	for _, e := range b {
-		reqs = append(reqs, elastic.NewBulkIndexRequest().Doc(e))
+		reqs = append(reqs,
+			elastic.NewBulkUpdateRequest().
+				// Use ES as a latest value store, update the flow's document
+				// with the latest counters on each incoming event.
+				DocAsUpsert(true).
+				Id(strconv.FormatUint(uint64(e.FlowID), 10)).
+				Doc(e).
+				RetryOnConflict(1),
+		)
 	}
 
 	// Add all index requests to the bulk request.

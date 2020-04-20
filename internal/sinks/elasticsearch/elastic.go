@@ -98,8 +98,8 @@ func (s *ElasticSink) PushUpdate(e bpf.Event) {
 
 	// Wrap the BPF event in a structure to be inserted into the database.
 	ee := event{
-		EventType: "update",
-		Event:     &e,
+		State: "established",
+		Event: &e,
 	}
 
 	s.transformEvent(&ee)
@@ -111,8 +111,8 @@ func (s *ElasticSink) PushDestroy(e bpf.Event) {
 
 	// Wrap the BPF event in a structure to be inserted into the database.
 	ee := event{
-		EventType: "destroy",
-		Event:     &e,
+		State: "finished",
+		Event: &e,
 	}
 
 	s.transformEvent(&ee)
