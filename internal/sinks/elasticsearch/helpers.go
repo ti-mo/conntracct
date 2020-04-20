@@ -1,6 +1,7 @@
 package elasticsearch
 
 import (
+	"os"
 	"strings"
 
 	"github.com/ti-mo/conntracct/internal/config"
@@ -17,7 +18,11 @@ func sinkDefaults(sc *config.SinkConfig) {
 	}
 
 	if sc.Database == "" {
-		sc.Database = "conntracct"
+		h, err := os.Hostname()
+		if err != nil {
+			panic(err)
+		}
+		sc.Database = "conntracct-" + h
 	}
 
 	if sc.BatchSize == 0 {
