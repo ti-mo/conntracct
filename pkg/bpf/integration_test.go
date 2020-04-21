@@ -258,10 +258,9 @@ func TestProbeVerify(t *testing.T) {
 	// Network namespace.
 	assert.EqualValues(t, ns, ev.NetNS, ev.String())
 
-	// Timestamp is always 0 on the first packet, since it passes
-	// the conntrack accounting code before being in 'confirmed' state.
-	// The nf_conn_tstamp is written in the confirmation routine.
-	assert.EqualValues(t, 0, ev.Start, ev.String())
+	// Timestamps
+	assert.NotEqual(t, 0, ev.Start, ev.String())
+	assert.NotEqual(t, 0, ev.Timestamp, ev.String())
 
 	// Connmark (default 0)
 	assert.EqualValues(t, 0, ev.Connmark, ev.String())
@@ -279,6 +278,9 @@ func TestProbeVerify(t *testing.T) {
 	assert.EqualValues(t, net.IPv4(127, 0, 1, 1), ev.DstAddr, ev.String())
 	assert.EqualValues(t, 17, ev.Proto, ev.String())
 
+	start := ev.Start
+	ts := ev.Timestamp
+
 	// Wait for the first cooldown period to be over.
 	time.Sleep(10 * time.Millisecond)
 
@@ -287,9 +289,10 @@ func TestProbeVerify(t *testing.T) {
 	ev, err = readTimeout(out, 5)
 	require.NoError(t, err)
 
-	// The nf_conn should be in 'confirmed' state,
-	// so the start timestamp should be written.
-	assert.NotEqual(t, 0, ev.Start, ev.String())
+	// Start timestamp should carry the same value between multiple events.
+	assert.EqualValues(t, start, ev.Start, ev.String())
+	// Make sure the timestamp value increased over the previous sample.
+	assert.True(t, ev.Timestamp > ts)
 
 	require.NoError(t, acctProbe.RemoveConsumer(ac))
 }
