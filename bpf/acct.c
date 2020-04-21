@@ -101,7 +101,7 @@ struct bpf_map_def SEC("maps/config_ratecurve") config_ratecurve = {
 
 // probe_ready reads the `config` array map for the Ready flag.
 // It returns true if the Ready flag is set to 0x90 (go).
-static __inline bool probe_ready() {
+static __always_inline bool probe_ready() {
 
   u64 oc_ready = ConfigReady;
   u64 *rp = bpf_map_lookup_elem(&config, &oc_ready);
@@ -111,7 +111,7 @@ static __inline bool probe_ready() {
 
 // get_acct_ext gets a reference to the nf_conn's accounting extension.
 // Returns non-zero on error.
-static __inline int get_acct_ext(struct nf_conn_acct **acct_ext, struct nf_conn *ct) {
+static __always_inline int get_acct_ext(struct nf_conn_acct **acct_ext, struct nf_conn *ct) {
 
   // Check if accounting extension is enabled and initialized
   // for this connection. Important because the acct codepath
@@ -137,7 +137,7 @@ static __inline int get_acct_ext(struct nf_conn_acct **acct_ext, struct nf_conn 
 
 // get_ts_ext gets a reference to the nf_conn's timestamp extension.
 // Returns non-zero on error.
-static __inline int get_ts_ext(struct nf_conn_tstamp **ts_ext, struct nf_conn *ct) {
+static __always_inline int get_ts_ext(struct nf_conn_tstamp **ts_ext, struct nf_conn *ct) {
 
   struct nf_ct_ext *ct_ext;
   bpf_probe_read(&ct_ext, sizeof(ct_ext), &ct->ext);
@@ -158,7 +158,7 @@ static __inline int get_ts_ext(struct nf_conn_tstamp **ts_ext, struct nf_conn *c
 
 // extract_counters extracts accounting info from an nf_conn into acct_event_t.
 // Returns 0 if acct extension was present in ct.
-static __inline int extract_counters(struct acct_event_t *data, struct nf_conn *ct) {
+static __always_inline int extract_counters(struct acct_event_t *data, struct nf_conn *ct) {
 
   struct nf_conn_acct *acct_ext = 0;
   if (get_acct_ext(&acct_ext, ct))
@@ -178,7 +178,7 @@ static __inline int extract_counters(struct acct_event_t *data, struct nf_conn *
 
 // extract_tstamp extracts the start timestamp of nf_conn_tstamp inside an nf_conn
 // into acct_event_t. Returns 0 if timestamp extension was present in ct.
-static __inline int extract_tstamp(struct acct_event_t *data, struct nf_conn *ct) {
+static __always_inline int extract_tstamp(struct acct_event_t *data, struct nf_conn *ct) {
 
   struct nf_conn_tstamp *ts_ext = 0;
   if (get_ts_ext(&ts_ext, ct))
@@ -191,7 +191,7 @@ static __inline int extract_tstamp(struct acct_event_t *data, struct nf_conn *ct
 
 // extract_tuple extracts tuple information (proto, src/dest ip and port) of an nf_conn
 // into an acct_event_t.
-static __inline void extract_tuple(struct acct_event_t *data, struct nf_conn *ct) {
+static __always_inline void extract_tuple(struct acct_event_t *data, struct nf_conn *ct) {
 
   struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];
   bpf_probe_read(&tuplehash, sizeof(tuplehash), &ct->tuplehash);
@@ -207,7 +207,7 @@ static __inline void extract_tuple(struct acct_event_t *data, struct nf_conn *ct
 }
 
 // extract_netns extracts the nf_conn's network namespace inode number into an acct_event_t.
-static __inline void extract_netns(struct acct_event_t *data, struct nf_conn *ct) {
+static __always_inline void extract_netns(struct acct_event_t *data, struct nf_conn *ct) {
 
   // Obtain reference to network namespace.
   // Warning: ct_net is a possible_net_t with a single member,
@@ -224,7 +224,7 @@ static __inline void extract_netns(struct acct_event_t *data, struct nf_conn *ct
 
 // curve_get returns an entry from the curve array as a signed 64-bit integer.
 // Returns negative if an entry was not found at the requested index.
-static __inline s64 curve_get(enum o_config_ratecurve curve_enum) {
+static __always_inline s64 curve_get(enum o_config_ratecurve curve_enum) {
 
   int offset = curve_enum;
   u64 *confp = bpf_map_lookup_elem(&config_ratecurve, &offset);
@@ -235,7 +235,7 @@ static __inline s64 curve_get(enum o_config_ratecurve curve_enum) {
 }
 
 // flow_cooldown_expired returns true if the flow's cooldown period is over.
-static __inline bool flow_cooldown_expired(struct nf_conn *ct, u64 ts) {
+static __always_inline bool flow_cooldown_expired(struct nf_conn *ct, u64 ts) {
 
   // Look up the flow's cooldown expiration time.
   u64 *nextp = bpf_map_lookup_elem(&flow_cooldown, &ct);
@@ -253,7 +253,7 @@ static __inline bool flow_cooldown_expired(struct nf_conn *ct, u64 ts) {
 // the second age threshold (curve1age), to protect against event storms
 // when the program is restarted.
 // This call is write-once due to BPF_NOEXIST.
-static __inline u64 flow_initialize_origin(struct nf_conn *ct, u64 ts, u64 pkts_total) {
+static __always_inline u64 flow_initialize_origin(struct nf_conn *ct, u64 ts, u64 pkts_total) {
 
   u64 origin = ts;
 
@@ -283,7 +283,7 @@ update:
 // hashmap. The time elapsed between the origin and the given
 // ts is returned. If there is no first-seen timestamp for the
 // flow, returns a zero value.
-static __inline u64 flow_get_age(struct nf_conn *ct, u64 ts) {
+static __always_inline u64 flow_get_age(struct nf_conn *ct, u64 ts) {
 
   // Initialize origin to the current timestamp so a lookup miss
   // causes a 0ns age to be returned. (new or unknown flows)
@@ -300,7 +300,7 @@ static __inline u64 flow_get_age(struct nf_conn *ct, u64 ts) {
 // for the flow during the current event.
 // Returns negative if the flow is younger than the minimum age threshold,
 // or if an internal curve lookup error occurred.
-static __inline s64 flow_get_interval(struct nf_conn *ct, u64 ts) {
+static __always_inline s64 flow_get_interval(struct nf_conn *ct, u64 ts) {
 
   // Always returns a positive or 0 value.
   u64 age = flow_get_age(ct, ts);
@@ -328,7 +328,7 @@ static __inline s64 flow_get_interval(struct nf_conn *ct, u64 ts) {
   return curve_get(ConfigCurve2Interval);
 }
 
-static __inline u64 flow_set_cooldown(struct nf_conn *ct, u64 ts) {
+static __always_inline u64 flow_set_cooldown(struct nf_conn *ct, u64 ts) {
 
   // Get the update interval for this flow.
   // A negative result indicates that the event should be dropped
@@ -349,20 +349,20 @@ static __inline u64 flow_set_cooldown(struct nf_conn *ct, u64 ts) {
 // When this field is zero, the packet (and flow) are at risk of being dropped
 // early and not being inserted into the conntrack table. Conns should be
 // ignored until they are valid.
-static __inline bool flow_status_valid(struct nf_conn *ct) {
+static __always_inline bool flow_status_valid(struct nf_conn *ct) {
   u32 status;
   bpf_probe_read(&status, sizeof(status), &ct->status);
 	return status != 0;
 }
 
 // flow_cleanup removes all possible map entries related to the connection.
-static __inline void flow_cleanup(struct nf_conn *ct) {
+static __always_inline void flow_cleanup(struct nf_conn *ct) {
   bpf_map_delete_elem(&flow_cooldown, &ct);
   bpf_map_delete_elem(&flow_origin, &ct);
 }
 
 // flow_sample_update samples an update event for an nf_conn.
-static __inline u64 flow_sample_update(struct nf_conn *ct, u64 ts, struct pt_regs *ctx) {
+static __always_inline u64 flow_sample_update(struct nf_conn *ct, u64 ts, struct pt_regs *ctx) {
 
   // Ignore flows with a zero status field.
   if (!flow_status_valid(ct))
