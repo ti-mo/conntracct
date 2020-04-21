@@ -345,46 +345,28 @@ static __inline u64 flow_set_cooldown(struct nf_conn *ct, u64 ts) {
   return interval;
 }
 
+// flow_status_valid checks if the nf_conn has a non-zero 'status' field.
+// When this field is zero, the packet (and flow) are at risk of being dropped
+// early and not being inserted into the conntrack table. Conns should be
+// ignored until they are valid.
+static __inline bool flow_status_valid(struct nf_conn *ct) {
+  u32 status;
+  bpf_probe_read(&status, sizeof(status), &ct->status);
+	return status != 0;
+}
+
 // flow_cleanup removes all possible map entries related to the connection.
 static __inline void flow_cleanup(struct nf_conn *ct) {
   bpf_map_delete_elem(&flow_cooldown, &ct);
   bpf_map_delete_elem(&flow_origin, &ct);
 }
 
-SEC("kprobe/__nf_ct_refresh_acct")
-int kprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
+// flow_sample_update samples an update event for an nf_conn.
+static __inline u64 flow_sample_update(struct nf_conn *ct, u64 ts, struct pt_regs *ctx) {
 
-  if (!probe_ready())
+  // Ignore flows with a zero status field.
+  if (!flow_status_valid(ct))
     return 0;
-
-  struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
-
-  u32 pid = bpf_get_current_pid_tgid();
-
-  // stash the conntrack pointer for lookup on return
-  bpf_map_update_elem(&currct, &pid, &ct, BPF_ANY);
-
-  return 0;
-}
-
-SEC("kretprobe/__nf_ct_refresh_acct")
-int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
-
-  if (!probe_ready())
-    return 0;
-
-  u32 pid = bpf_get_current_pid_tgid();
-  u64 ts = bpf_ktime_get_ns();
-
-  // Look up the conntrack structure stashed by the kprobe.
-  struct nf_conn **ctp;
-  ctp = bpf_map_lookup_elem(&currct, &pid);
-  if (ctp == 0)
-    return 0;
-
-  // Dereference and delete from the stash table.
-  struct nf_conn *ct = *ctp;
-  bpf_map_delete_elem(&currct, &pid);
 
   // Allocate event struct after all checks have succeeded.
   struct acct_event_t data = {
@@ -436,8 +418,74 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
   return 0;
 }
 
-SEC("kprobe/nf_conntrack_free")
-int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
+// __nf_conntrack_hash_insert is called after the conn's start timestamp has
+// been calculated and its IPS_CONFIRMED bit has been set. This probe will
+// sample the first packet in a flow only, after all policy decisions have been
+// made.
+//
+// This is necessary because __nf_ct_refresh_acct is called very early in the
+// call chain and includes flows that might still get dropped from the
+// conntrack table for various (protocol-specific) reasons. In both probes,
+// we check if the 'status' field is non-zero to avoid sampling packets that
+// still need to undergo some policy processing.
+SEC("kprobe/__nf_conntrack_hash_insert")
+int kprobe____nf_conntrack_hash_insert(struct pt_regs *ctx) {
+
+  if (!probe_ready())
+    return 0;
+
+  u64 ts = bpf_ktime_get_ns();
+
+  struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
+
+  return flow_sample_update(ct, ts, ctx);
+}
+
+// Top half of the update sampler. Stash the nf_conn pointer to later process
+// in a kretprobe after the counters have been updated.
+SEC("kprobe/__nf_ct_refresh_acct")
+int kprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
+
+  if (!probe_ready())
+    return 0;
+
+  struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
+
+  u32 pid = bpf_get_current_pid_tgid();
+
+  // stash the conntrack pointer for lookup on return
+  bpf_map_update_elem(&currct, &pid, &ct, BPF_ANY);
+
+  return 0;
+}
+
+// Bottom half of the update sampler. Extract accounting data from the nf_conn.
+SEC("kretprobe/__nf_ct_refresh_acct")
+int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
+
+  if (!probe_ready())
+    return 0;
+
+  u32 pid = bpf_get_current_pid_tgid();
+  u64 ts = bpf_ktime_get_ns();
+
+  // Look up the conntrack structure stashed by the kprobe.
+  struct nf_conn **ctp;
+  ctp = bpf_map_lookup_elem(&currct, &pid);
+  if (ctp == 0)
+    return 0;
+
+  // Dereference and delete from the stash table.
+  struct nf_conn *ct = *ctp;
+  bpf_map_delete_elem(&currct, &pid);
+
+  return flow_sample_update(ct, ts, ctx);
+}
+
+// Sample destroy events. This probe sends destroy events to userspace as well
+// as cleaning up internal rate limiting bookkeeping for the nf_conn.
+SEC("kprobe/destroy_conntrack")
+int kprobe__destroy_conntrack(struct pt_regs *ctx) {
 
   if (!probe_ready())
     return 0;
@@ -448,6 +496,10 @@ int kprobe__nf_conntrack_free(struct pt_regs *ctx) {
 
   // Remove references to this nf_conn from bookkeeping.
   flow_cleanup(ct);
+
+  // Ignore flows with a zero status field.
+  if (!flow_status_valid(ct))
+    return 0;
 
   struct acct_event_t data = {
     .start = 0,
