@@ -72,7 +72,7 @@ var kprobes = map[string]Probes{
 	"acct_v1": {
 		{
 			Kind: "kprobe",
-			Name: "destroy_conntrack",
+			Name: "nf_ct_delete",
 		},
 		{
 			Kind: "kretprobe",

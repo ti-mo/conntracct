@@ -156,6 +156,17 @@ static __always_inline int get_ts_ext(struct nf_conn_tstamp **ts_ext, struct nf_
   return 0;
 }
 
+
+// flow_status gets the flow's status field.
+// When this field is zero, the packet (and flow) are at risk of being dropped
+// early and not being inserted into the conntrack table. Conns should be
+// ignored until this field is set.
+static __always_inline u32 flow_status(struct nf_conn *ct) {
+  u32 status;
+  bpf_probe_read(&status, sizeof(status), &ct->status);
+  return status;
+}
+
 // extract_counters extracts accounting info from an nf_conn into acct_event_t.
 // Returns 0 if acct extension was present in ct.
 static __always_inline int extract_counters(struct acct_event_t *data, struct nf_conn *ct) {
@@ -203,7 +214,6 @@ static __always_inline void extract_tuple(struct acct_event_t *data, struct nf_c
 
   data->srcport = tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all;
   data->dstport = tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
-
 }
 
 // extract_netns extracts the nf_conn's network namespace inode number into an acct_event_t.
@@ -345,16 +355,6 @@ static __always_inline u64 flow_set_cooldown(struct nf_conn *ct, u64 ts) {
   return interval;
 }
 
-// flow_status_valid checks if the nf_conn has a non-zero 'status' field.
-// When this field is zero, the packet (and flow) are at risk of being dropped
-// early and not being inserted into the conntrack table. Conns should be
-// ignored until they are valid.
-static __always_inline bool flow_status_valid(struct nf_conn *ct) {
-  u32 status;
-  bpf_probe_read(&status, sizeof(status), &ct->status);
-	return status != 0;
-}
-
 // flow_cleanup removes all possible map entries related to the connection.
 static __always_inline void flow_cleanup(struct nf_conn *ct) {
   bpf_map_delete_elem(&flow_cooldown, &ct);
@@ -365,7 +365,7 @@ static __always_inline void flow_cleanup(struct nf_conn *ct) {
 static __always_inline u64 flow_sample_update(struct nf_conn *ct, u64 ts, struct pt_regs *ctx) {
 
   // Ignore flows with a zero status field.
-  if (!flow_status_valid(ct))
+  if (flow_status(ct) == 0)
     return 0;
 
   // Allocate event struct after all checks have succeeded.
@@ -414,6 +414,33 @@ static __always_inline u64 flow_sample_update(struct nf_conn *ct, u64 ts, struct
 
   // Submit event to userspace.
   bpf_perf_event_output(ctx, &perf_acct_update, BPF_F_CURRENT_CPU, &data, sizeof(data));
+
+  return 0;
+}
+
+// flow_sample_destroy samples a destroy event for an nf_conn.
+static __always_inline u64 flow_sample_destroy(struct nf_conn *ct, u64 ts, struct pt_regs *ctx) {
+
+  // Ignore flows with a zero status field.
+  if (flow_status(ct) == 0)
+    return 0;
+
+  struct acct_event_t data = {
+    .start = 0,
+    .ts = ts,
+    .cptr = (u64)ct,
+  };
+
+  // Ignore the event if the nf_conn doesn't contain counters.
+  if (extract_counters(&data, ct))
+    return 0;
+
+  extract_tuple(&data, ct);
+  extract_netns(&data, ct);
+  extract_tstamp(&data, ct);
+  bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
+
+  bpf_perf_event_output(ctx, &perf_acct_end, BPF_F_CURRENT_CPU, &data, sizeof(data));
 
   return 0;
 }
@@ -484,8 +511,8 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
 
 // Sample destroy events. This probe sends destroy events to userspace as well
 // as cleaning up internal rate limiting bookkeeping for the nf_conn.
-SEC("kprobe/destroy_conntrack")
-int kprobe__destroy_conntrack(struct pt_regs *ctx) {
+SEC("kprobe/nf_ct_delete")
+int kprobe__nf_ct_delete(struct pt_regs *ctx) {
 
   if (!probe_ready())
     return 0;
@@ -497,28 +524,7 @@ int kprobe__destroy_conntrack(struct pt_regs *ctx) {
   // Remove references to this nf_conn from bookkeeping.
   flow_cleanup(ct);
 
-  // Ignore flows with a zero status field.
-  if (!flow_status_valid(ct))
-    return 0;
-
-  struct acct_event_t data = {
-    .start = 0,
-    .ts = ts,
-    .cptr = (u64)ct,
-  };
-
-  // Ignore the event if the nf_conn doesn't contain counters.
-  if (extract_counters(&data, ct))
-    return 0;
-
-  extract_tuple(&data, ct);
-  extract_netns(&data, ct);
-  extract_tstamp(&data, ct);
-  bpf_probe_read(&data.connmark, sizeof(data.connmark), &ct->mark);
-
-  bpf_perf_event_output(ctx, &perf_acct_end, BPF_F_CURRENT_CPU, &data, sizeof(data));
-
-  return 0;
+  return flow_sample_destroy(ct, ts, ctx);
 }
 
 char _license[] SEC("license") = "GPL";
