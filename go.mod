@@ -15,7 +15,7 @@ require (
 	github.com/lorenzosaino/go-sysctl v0.1.0
 	github.com/magefile/mage v1.8.0
 	github.com/mdlayher/netlink v0.0.0-20191009155606-de872b0d824b
-	github.com/mitchellh/go-homedir v1.0.0
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/olivere/elastic/v7 v7.0.9
 	github.com/pkg/errors v0.8.1
