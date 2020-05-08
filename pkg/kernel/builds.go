@@ -21,6 +21,20 @@ var Builds = map[string]Kernel{
 		Params:  params["MarkNFTNat"],
 		Probes:  kprobes["acct_v1"],
 	},
+	// 4.14.0 adds a `struct netns_can` to `struct net`.
+	"4.13.0": {
+		Version: "4.13.16",
+		URL:     "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.13.16.tar.xz",
+		Params:  params["MarkNFTNat"],
+		Probes:  kprobes["acct_v1"],
+	},
+	// 4.14 adds a `struct list_head` in `struct net`.
+	"4.14.0": {
+		Version: "4.14.177",
+		URL:     "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.14.177.tar.xz",
+		Params:  params["MarkNFTNat"],
+		Probes:  kprobes["acct_v1"],
+	},
 	// 4.17 saw a breaking change in netns struct layout. Not a long-term kernel.
 	"4.17.0": {
 		Version: "4.17.9",
@@ -72,7 +86,7 @@ var kprobes = map[string]Probes{
 	"acct_v1": {
 		{
 			Kind: "kprobe",
-			Name: "destroy_conntrack",
+			Name: "nf_ct_delete",
 		},
 		{
 			Kind: "kretprobe",

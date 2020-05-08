@@ -23,6 +23,7 @@ The following major distributions are supported:
     - Stretch
     - Buster
 - Ubuntu
+    - Xenial (with Hardware Enablement kernel)
     - Bionic
 - Fedora
 - Arch Linux
@@ -111,7 +112,7 @@ All bpf-related tasks are in their own `bpf:` Mage namespace.
 
 This will fetch, extract and configure all versions of Linux targeted by
 the build package to build probes against. This is performed in isolation in
-`/tmp/conntrack/kernels` and will not touch your installed OS kernel.
+`$HOME/.cache/conntracct` and will not touch your installed OS kernel.
 
 ## Developing
 
