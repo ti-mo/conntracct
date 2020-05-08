@@ -10,8 +10,21 @@ import (
 
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
+	"github.com/mitchellh/go-homedir"
 	"github.com/ti-mo/kconfig"
 )
+
+var (
+	buildDir string
+)
+
+func init() {
+	h, err := homedir.Expand("~/.cache/conntracct/kernels")
+	if err != nil {
+		panic(err)
+	}
+	buildDir = h
+}
 
 // Params is a map of kernel parameters.
 type Params map[string]string
