@@ -73,14 +73,20 @@ func (s *ElasticSink) sendBatch(b batch) {
 	// Create index requests for each event in the batch.
 	reqs := make([]elastic.BulkableRequest, 0, len(b))
 	for _, e := range b {
+		s := elastic.NewScriptStored(scriptFlowUpsertName).Param("doc", e)
 		reqs = append(reqs,
 			elastic.NewBulkUpdateRequest().
 				// Use ES as a latest value store, update the flow's document
 				// with the latest counters on each incoming event.
-				DocAsUpsert(true).
 				Id(strconv.FormatUint(uint64(e.FlowID), 10)).
-				Doc(e).
-				RetryOnConflict(1),
+				// In case the document doesn't exist yet, insert an empty
+				// document so ES doesn't complain with a missing document
+				// exception.
+				Upsert(map[int]int{}).
+				// Always run the update script, even when the document didn't
+				// exist before the update request.
+				ScriptedUpsert(true).
+				Script(s),
 		)
 	}
 

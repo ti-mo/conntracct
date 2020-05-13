@@ -1,6 +1,7 @@
 package elasticsearch
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 
@@ -55,4 +56,16 @@ func clientOptions(sc config.SinkConfig) []elastic.ClientOptionFunc {
 	}
 
 	return opts
+}
+
+// mustJSONEscape escapes a string to be safely sent in a json field.
+func mustJSONEscape(i string) string {
+	b, err := json.Marshal(i)
+	if err != nil {
+		panic(err)
+	}
+
+	// Marshal output comes enclosed in double quotes, strip them.
+	s := string(b)
+	return s[1 : len(s)-1]
 }

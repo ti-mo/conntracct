@@ -80,6 +80,11 @@ func (s *ElasticSink) Init(sc config.SinkConfig) error {
 		log.WithField("sink", sc.Name).Fatalf("error configuring index settings: %s", err.Error())
 	}
 
+	// Install the flow upsert script to the elastic server.
+	if err := s.installScript(scriptFlowUpsertName, scriptFlowUpsert); err != nil {
+		log.WithField("sink", sc.Name).Fatalf("error installing script: %s", err.Error())
+	}
+
 	// Start workers.
 	s.sendChan = make(chan batch, 64)
 	s.newBatch() // initial empty batch

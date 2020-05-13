@@ -7,6 +7,21 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	// Name of the flow upsert script on the elastic server.
+	scriptFlowUpsertName = "ct-flow-upsert"
+
+	// Scripted upsert. Only commit a document update to the index if the
+	// document does not yet exist on the server, or if its state is
+	// 'established'. This is to prevent out-of-order destroys being clobbered
+	// by updates. Once a document has a flow_state 'finished', it's immutable.
+	scriptFlowUpsert = `if (ctx._source.flow_state == null || ctx._source.flow_state == 'established') {
+		ctx._source = params.doc;
+	} else {
+		ctx.op = 'none';
+	}`
+)
+
 // installMappings sets up data types for exported fields.
 // An index template 'conntracct_mappings.<db>' is installed on
 // the elasticsearch server for the given db prefix.
@@ -63,6 +78,30 @@ func (s *ElasticSink) installSettings(db string, shards, replicas uint16) error 
 	}`, db, shards, replicas)
 
 	return s.installTemplate(templateName, settings)
+}
+
+// installScript installs the named Painless script to the elastic server.
+func (s *ElasticSink) installScript(name, source string) error {
+
+	script := fmt.Sprintf(`{
+		"script": {
+			"lang": "painless",
+			"source": "%s"
+		}
+	}`, mustJSONEscape(source))
+
+	resp, err := s.client.PutScript().Id(name).BodyString(script).Do(context.Background())
+	if err != nil {
+		return err
+	}
+
+	if !resp.Acknowledged {
+		return errScript
+	}
+
+	log.WithField("sink", s.config.Name).Debugf("Installed stored script '%s'", name)
+
+	return nil
 }
 
 // installTemplate applies the given template name and body
