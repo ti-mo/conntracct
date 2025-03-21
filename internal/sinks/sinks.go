@@ -8,6 +8,7 @@ import (
 	"github.com/ti-mo/conntracct/internal/config"
 	"github.com/ti-mo/conntracct/internal/sinks/dummy"
 	"github.com/ti-mo/conntracct/internal/sinks/elasticsearch"
+	"github.com/ti-mo/conntracct/internal/sinks/clickhouse"
 	"github.com/ti-mo/conntracct/internal/sinks/influxdb"
 	"github.com/ti-mo/conntracct/internal/sinks/stdout"
 	"github.com/ti-mo/conntracct/internal/sinks/types"
@@ -56,6 +57,12 @@ func New(cfg config.SinkConfig) (Sink, error) {
 		sink = &idb
 	case types.Elastic:
 		es := elasticsearch.New()
+		if err := es.Init(cfg); err != nil {
+			return nil, err
+		}
+		sink = &es
+	case types.Clickhouse:
+		es := clickhouse.New()
 		if err := es.Init(cfg); err != nil {
 			return nil, err
 		}

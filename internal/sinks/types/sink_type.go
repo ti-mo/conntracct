@@ -12,4 +12,5 @@ const (
 	InfluxUDP
 	InfluxHTTP
 	Elastic
+	Clickhouse
 )

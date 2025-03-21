@@ -117,6 +117,8 @@ func stringToSinkTypeHookFunc() mapstructure.DecodeHookFunc {
 			return types.InfluxHTTP, nil
 		case "elastic", "elasticsearch":
 			return types.Elastic, nil
+		case "clickhouse":
+			return types.Clickhouse, nil
 		default:
 			return types.SinkType(0), fmt.Errorf("failed parsing sink type %v", data)
 		}
