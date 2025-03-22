@@ -71,6 +71,8 @@ func (s *ClickhouseSink) Init(sc config.SinkConfig) error {
 
 	// Start workers.
 	s.sendChan = make(chan batch, 64)
+	log.WithField("sink", sc.Name).Debugf("configuring batch setup")
+
 	s.newBatch() // initial empty batch
 
 	go s.sendWorker()
@@ -84,12 +86,26 @@ func (s *ClickhouseSink) Init(sc config.SinkConfig) error {
 
 // PushUpdate pushes an update event into the buffer of the ClickHouse accounting sink.
 func (s *ClickhouseSink) PushUpdate(e bpf.Event) {
-	s.addBatchEvent(&e)
+	// Wrap the BPF event in a structure to be inserted into the database.
+	ce := event{
+		State: "established",
+		Event: &e,
+	}
+
+	s.transformEvent(&ce)
+	s.addBatchEvent(&ce)
 }
 
 // PushDestroy pushes a destroy event into the buffer of the ClickHouse accounting sink.
 func (s *ClickhouseSink) PushDestroy(e bpf.Event) {
-	s.addBatchEvent(&e)
+	// Wrap the BPF event in a structure to be inserted into the database.
+	ce := event{
+		State: "finished",
+		Event: &e,
+	}
+
+	s.transformEvent(&ce)
+	s.addBatchEvent(&ce)
 }
 
 // IsInit returns true if the ClickHouse accounting sink was successfully initialized.
@@ -127,7 +143,9 @@ func (s *ClickhouseSink) installSchema(db string) error {
 	tableName := fmt.Sprintf("%s_flows", db)
 	query := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s.%s (
-			flow_id UUID,
+			flow_id UInt64,
+			hostname String,
+			state String,
 			bytes_orig UInt64,
 			bytes_ret UInt64,
 			bytes_total UInt64,
@@ -140,6 +158,7 @@ func (s *ClickhouseSink) installSchema(db string) error {
 			dst_addr IPv4,
 			dst_port Int32,
 			netns Int64,
+			proto_name String,
 			start DateTime,
 			timestamp DateTime
 		) ENGINE = MergeTree()

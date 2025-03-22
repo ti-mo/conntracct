@@ -1,0 +1,41 @@
+package clickhouse
+
+import (
+	"os"
+
+	"github.com/ti-mo/conntracct/internal/sinks/helpers"
+	"github.com/ti-mo/conntracct/pkg/bpf"
+)
+
+// event wraps a bpf.Event in an ES-specific structure.
+// This structure is used to generate the JSON document
+// sent to elasticsearch.
+type event struct {
+	// State of the flow, eg. 'established' or 'finished'.
+	State string `json:"flow_state"`
+
+	// Hostname of the machine sending the event.
+	Hostname string `json:"hostname"`
+
+	// Embedded Event struct, to be included on
+	// the root level of the marshaled json.
+	*bpf.Event
+
+	// Calculated fields.
+	PacketsTotal uint64 `json:"packets_total"`
+	BytesTotal   uint64 `json:"bytes_total"`
+	ProtoName    string `json:"proto_name"`
+}
+
+// transformEvent applies transformations on an event before
+// pushing it to elasticsearch.
+func (s *ClickhouseSink) transformEvent(e *event) {
+
+	// TODO(timo): Allow the user to override the hostname.
+	e.Hostname, _ = os.Hostname()
+
+	// Calculated fields.
+	e.PacketsTotal = e.PacketsOrig + e.PacketsRet
+	e.BytesTotal = e.BytesOrig + e.BytesRet
+	e.ProtoName = helpers.ProtoIntStr(e.Proto)
+}

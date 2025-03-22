@@ -48,7 +48,7 @@ func clientOptions(sc config.SinkConfig) *clickhouse.Options {
 
 	// Set up basic authentication if configured.
 	if sc.Username != "" && sc.Password != "" {
-		log.WithField("sink", sc.Name).Debug("Configured clickhouse client with authentication")
+		log.WithField("sink", sc.Name).Debug("Configured clickhouse connection with authentication")
 	}
 
 	return opts

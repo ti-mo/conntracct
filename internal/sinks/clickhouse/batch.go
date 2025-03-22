@@ -2,17 +2,21 @@ package clickhouse
 
 import (
 	"context"
-	"github.com/ti-mo/conntracct/pkg/bpf"
+	"fmt"
+	"time"
+	log "github.com/sirupsen/logrus"
+
 )
 
-type batch []*bpf.Event
+type batch []*event
 
 func (s *ClickhouseSink) newBatch() {
 	s.batch = make(batch, 0, s.config.BatchSize)
 	s.stats.SetBatchLength(0)
+	log.WithField("sink", s.config.Name).Debugf("batchsize '%d'", s.config.BatchSize)
 }
 
-func (s *ClickhouseSink) addBatchEvent(e *bpf.Event) {
+func (s *ClickhouseSink) addBatchEvent(e *event) {
 	s.batchMu.Lock()
 	s.batch = append(s.batch, e)
 
@@ -44,30 +48,41 @@ func (s *ClickhouseSink) flushBatch() {
 
 func (s *ClickhouseSink) sendBatch(b batch) {
 	ctx := context.Background()
-	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO s.config.Database")
+	tableName := fmt.Sprintf("%s_flows", s.config.Database)
+	batch, err := s.conn.PrepareBatch(ctx, fmt.Sprintf("INSERT INTO %s.%s", s.config.Database, tableName))
 	if err != nil {
-		return
+		log.WithField("sink", s.config.Name).Error("failed to prepare batch operation. Error: %v", err)
 	}
 	for _, e := range b {
+		start := time.Unix(0, int64(e.Start))
+		ts := time.Unix(0, int64(e.Timestamp))
 		err := batch.Append(
 			e.FlowID,
+			e.Hostname,
+			e.State,
 			e.BytesOrig,
 			e.BytesRet,
-			0,
+			e.BytesTotal,
 			e.PacketsOrig,
 			e.PacketsRet,
-			0,
+			e.PacketsTotal,
 			e.Connmark,
 			e.SrcAddr,
 			e.SrcPort,
 			e.DstAddr,
 			e.DstPort,
 			e.NetNS,
-			e.Start,
-			e.Timestamp,
+			e.ProtoName,
+			start,
+			ts,
 		)
 		if err != nil {
-			return
+			log.WithField("sink", s.config.Name).Error("failed append event to batch operations. Error: %v", err)
 		}
+	}
+
+	err = batch.Send()
+	if err != nil {
+		log.WithField("sink", s.config.Name).Error("failed execute batch operation. Error: %v", err)
 	}
 }
