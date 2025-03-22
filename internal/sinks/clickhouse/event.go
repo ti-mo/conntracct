@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/ti-mo/conntracct/internal/sinks/helpers"
+	"github.com/ti-mo/conntracct/pkg/boottime"
 	"github.com/ti-mo/conntracct/pkg/bpf"
 )
 
@@ -30,9 +31,14 @@ type event struct {
 // transformEvent applies transformations on an event before
 // pushing it to elasticsearch.
 func (s *ClickhouseSink) transformEvent(e *event) {
-
+	
 	// TODO(timo): Allow the user to override the hostname.
 	e.Hostname, _ = os.Hostname()
+
+	// Apply boot time offset to the (relative) event timestamp, convert to milliseconds.
+	// Nanosecond-resolution unix timestamps cannot be ingested by elastic.
+	// https://github.com/elastic/elasticsearch/issues/43917
+	e.Timestamp = uint64(boottime.Absolute(int64(e.Timestamp)))
 
 	// Calculated fields.
 	e.PacketsTotal = e.PacketsOrig + e.PacketsRet

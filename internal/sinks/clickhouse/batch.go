@@ -13,7 +13,6 @@ type batch []*event
 func (s *ClickhouseSink) newBatch() {
 	s.batch = make(batch, 0, s.config.BatchSize)
 	s.stats.SetBatchLength(0)
-	log.WithField("sink", s.config.Name).Debugf("batchsize '%d'", s.config.BatchSize)
 }
 
 func (s *ClickhouseSink) addBatchEvent(e *event) {
