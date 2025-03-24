@@ -161,13 +161,14 @@ func (s *ClickhouseSink) installSchema(db string) error {
 			proto_name String,
 			start DateTime,
 			timestamp DateTime
-		) ENGINE = MergeTree()
-		ORDER BY (flow_id)
+		) ENGINE = ReplacingMergeTree(timestamp)
+		ORDER BY (flow_id, start)
 		PARTITION BY toYYYYMM(start)
 		PRIMARY KEY (flow_id)
 		SETTINGS index_granularity = 8192
 	`, db, tableName)
 
+	// ) ENGINE = ReplacingMergeTree(timestamp)
 	// Execute the query to create the table.
 	if err := s.conn.Exec(context.Background(), query); err != nil {
 		return fmt.Errorf("error creating table: %w", err)
