@@ -162,7 +162,7 @@ func (s *ClickhouseSink) installSchema(db string) error {
 			start DateTime,
 			timestamp DateTime
 		) ENGINE = ReplacingMergeTree(timestamp)
-		ORDER BY (flow_id, start)
+		ORDER BY (flow_id, hostname, netns, start)
 		PARTITION BY toYYYYMM(start)
 		PRIMARY KEY (flow_id)
 		SETTINGS index_granularity = 8192
