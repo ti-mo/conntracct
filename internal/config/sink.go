@@ -57,6 +57,9 @@ type SinkConfig struct {
 
 	// Write timeout of the sink's backing storage.
 	Timeout time.Duration `mapstructure:"timeout"`
+
+	// Write timeout of the sink's backing storage.
+	LatestValues bool `mapstructure:"latestValues"`
 }
 
 // DecodeSinkConfigMap extracts a map of SinkConfigs from configuration data.

@@ -36,6 +36,9 @@ type ClickhouseSink struct {
 
 	// Sink stats.
 	stats types.SinkStats
+
+	// Save all events as time series or only track latest state
+	latestValues bool
 }
 
 // New returns a new ClickHouse accounting sink.
@@ -63,10 +66,18 @@ func (s *ClickhouseSink) Init(sc config.SinkConfig) error {
 
 	s.config = sc
 	s.conn = conn
+	s.latestValues = sc.LatestValues
 
-	// Install database schema (tables, columns, etc.).
-	if err := s.installSchema(sc.Database); err != nil {
-		log.WithField("sink", sc.Name).Fatalf("error configuring schema: %s", err.Error())
+	if s.latestValues {
+		// install database scheme for event time series tracking
+		if err := s.installLatestSchema(sc.Database); err != nil {
+			log.WithField("sink", sc.Name).Fatalf("error configuring timeseries schema: %s", err.Error())
+		}
+	} else {
+		// Intstall database schema for latest state tracking
+		if err := s.installTimeseriesSchema(sc.Database); err != nil {
+			log.WithField("sink", sc.Name).Fatalf("error configuring latest schema: %s", err.Error())
+		}
 	}
 
 	// Start workers.
@@ -135,7 +146,53 @@ func (s *ClickhouseSink) WantDestroy() bool {
 
 // installSchema sets up the data schema for the given database in ClickHouse.
 // It creates a table for flow data with appropriate column types based on the mappings.
-func (s *ClickhouseSink) installSchema(db string) error {
+func (s *ClickhouseSink) installTimeseriesSchema(db string) error {
+	// Create table for flow data.
+	// We use the MergeTree engine which is the most common for OLAP-style tables in ClickHouse.
+	// Modify it based on your actual partitioning and primary key logic.
+
+	tableName := fmt.Sprintf("%s_flows", db)
+	query := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s.%s (
+			flow_id UInt64,
+			hostname String,
+			state String,
+			bytes_orig UInt64,
+			bytes_ret UInt64,
+			bytes_total UInt64,
+			packets_orig UInt64,
+			packets_ret UInt64,
+			packets_total UInt64,
+			connmark Int32,
+			src_addr IPv6,
+			src_port Int32,
+			dst_addr IPv6,
+			dst_port Int32,
+			netns Int64,
+			proto_name String,
+			start DateTime,
+			timestamp DateTime
+		) ENGINE = MergeTree()
+		ORDER BY (flow_id, hostname, netns, start)
+		PARTITION BY toYYYYMM(start)
+		PRIMARY KEY (flow_id)
+		SETTINGS index_granularity = 8192
+	`, db, tableName)
+
+	// ) ENGINE = ReplacingMergeTree(timestamp)
+	// Execute the query to create the table.
+	if err := s.conn.Exec(context.Background(), query); err != nil {
+		return fmt.Errorf("error creating table: %w", err)
+	}
+
+	log.WithField("sink", s.config.Name).Debugf("Installed schema for table '%s' in database '%s'", tableName, db)
+
+	return nil
+}
+
+// installSchema sets up the data schema for the given database in ClickHouse.
+// It creates a table for flow data with appropriate column types based on the mappings.
+func (s *ClickhouseSink) installLatestSchema(db string) error {
 	// Create table for flow data.
 	// We use the MergeTree engine which is the most common for OLAP-style tables in ClickHouse.
 	// Modify it based on your actual partitioning and primary key logic.
