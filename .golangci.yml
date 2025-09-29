@@ -1,12 +1,17 @@
----
+version: "2"
 linters:
-  presets:
+  default: none
+  enable:
+    - govet
+    - ineffassign
+    - misspell
     - unused
-    - performance
-    - format
-    - complexity
-    - bugs
 
-  disable:
-    - gochecknoinits
-    - gochecknoglobals
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ti-mo/conntracct
