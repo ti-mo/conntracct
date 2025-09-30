@@ -2,14 +2,7 @@ package bpf
 
 import "errors"
 
-const (
-	errFmtSymNotFound = "kernel symbol '%s' not found, conntrack kernel module not loaded"
-	errKernelRelease  = "invalid kernel release version '%s'"
-)
-
 var (
-	errNotInRange = errors.New("range check did not match any version")
-
 	errProbeStarted    = errors.New("probe already running")
 	errProbeNotStarted = errors.New("probe is not running")
 

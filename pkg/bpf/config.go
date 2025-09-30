@@ -58,11 +58,6 @@ const (
 
 // configure sets configuration values in the probe's config map.
 func (ap *Probe) configure(cfg Config) error {
-
-	if ap.collection == nil {
-		panic("nil eBPF collection in probe")
-	}
-
 	// Set sane defaults on the configuration structure.
 	cfg.probeDefaults()
 
@@ -70,15 +65,8 @@ func (ap *Probe) configure(cfg Config) error {
 		return errors.Wrap(err, "verifying probe configuration")
 	}
 
-	configMap, ok := ap.collection.Maps["config"]
-	if !ok {
-		return errors.New("map 'config' not found in eBPF collection")
-	}
-
-	curveMap, ok := ap.collection.Maps["config_ratecurve"]
-	if !ok {
-		return errors.New("map 'config_ratecurve' not found in eBPF collection")
-	}
+	configMap := ap.objs.Config
+	curveMap := ap.objs.ConfigRatecurve
 
 	if err := curveMap.Put(curve0Age, cfg.Curve0.Age.Nanoseconds()); err != nil {
 		return errors.Wrap(err, "Curve0Age in config_ratecurve")

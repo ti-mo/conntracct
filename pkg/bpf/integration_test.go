@@ -58,10 +58,10 @@ func TestMain(m *testing.M) {
 	// the correct conntrack kernel module to be loaded. This means we don't
 	// have to explicitly modprobe.
 	_, _, f, err := prepareNetNS(9999)
-	f()
 	if err != nil {
 		log.Fatal(err)
 	}
+	f()
 
 	// Create and start the Probe.
 	// For this to succeed, a conntrack kernel module needs to have been pre-loaded.
@@ -344,7 +344,6 @@ func newUpdateConsumer(t *testing.T) (*Consumer, chan Event) {
 // prepareNetNS creates a Conn in a new network namespace to use for testing.
 // Returns the UDP server and client, the netns identifier and error, if any.
 func prepareNetNS(port uint16) (*udpecho.MockUDPClient, uint64, func(), error) {
-
 	// Lock the current goroutine to the OS thread.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

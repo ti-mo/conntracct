@@ -18,7 +18,7 @@ var hashPool = sync.Pool{
 }
 
 // EventLength is the length of the struct sent by BPF.
-const EventLength = 104
+const EventLength = 108
 
 // Event is an accounting event delivered to userspace from the Probe.
 type Event struct {
@@ -43,9 +43,8 @@ type Event struct {
 // unmarshalBinary unmarshals a slice of bytes received from the
 // kernel's eBPF perf map into a struct using the machine's native endianness.
 func (e *Event) unmarshalBinary(b []byte) error {
-
 	if len(b) != EventLength {
-		return fmt.Errorf("input byte array incorrect length %d (expected %d)", len(b), EventLength)
+		return fmt.Errorf("input byte array incorrect length %d (expected %d): %v", len(b), EventLength, b)
 	}
 
 	e.Start = *(*uint64)(unsafe.Pointer(&b[0]))

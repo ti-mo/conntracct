@@ -1,12 +1,8 @@
-#include <linux/kconfig.h>
-#include "bpf_helpers.h"
+#include <uapi/linux/bpf.h>
+#include "vmlinux.h"
+#include "bpf_tracing.h"
 
-#define _LINUX_BLKDEV_H // calls macros that contain inline asm, which BPF doesn't support
-#include <net/netfilter/nf_conntrack.h>
-#include <net/netfilter/nf_conntrack_acct.h>
-#include <net/netfilter/nf_conntrack_timestamp.h>
-
-struct acct_event_t {
+struct event_t {
   u64 start;
   u64 ts;
   u64 cptr;
@@ -43,61 +39,63 @@ enum o_config_ratecurve {
 const int ready_val = 0x90;
 
 // perf map to send update events to userspace.
-struct bpf_map_def SEC("maps/perf_acct_update") perf_acct_update = {
-  .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __type(value, struct event_t);
+} perf_acct_update SEC(".maps");
 
 // perf map to send destroy events to userspace.
-struct bpf_map_def SEC("maps/perf_acct_end") perf_acct_end = {
-  .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __type(value, struct event_t);
+} perf_acct_end SEC(".maps");
 
 // Hash that holds a kernel timestamp per flow indicating when
 // the flow may send its next update event to userspace.
-struct bpf_map_def SEC("maps/flow_cooldown") flow_cooldown = {
-  .type = BPF_MAP_TYPE_HASH,
-  .key_size = sizeof(u64),
-  .value_size = sizeof(u64),
-  .max_entries = 65535,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, __u64);
+    __type(value, __u64);
+    __uint(max_entries, 65535);
+} flow_cooldown SEC(".maps");
 
 // Hash that holds a timestamp per flow indicating when the flow
 // was first seen. Used to implement age-based event rate limiting.
-struct bpf_map_def SEC("maps/flow_origin") flow_origin = {
-  .type = BPF_MAP_TYPE_HASH,
-  .key_size = sizeof(struct nf_conn *),
-  .value_size = sizeof(u64),
-  .max_entries = 65535,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct nf_conn *);
+    __type(value, __u64);
+    __uint(max_entries, 65535);
+} flow_origin SEC(".maps");
 
 // Communication channel between the kprobe and the kretprobe.
 // Holds a pointer to the nf_conn in the hot path (kprobe) and
 // reads + deletes it in the kretprobe.
-struct bpf_map_def SEC("maps/currct") currct = {
-  .type = BPF_MAP_TYPE_PERCPU_HASH,
-  .key_size = sizeof(u32),
-  .value_size = sizeof(struct nf_conn *),
-  .max_entries = 2048,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __type(key, __u32);
+    __type(value, struct nf_conn *);
+    __uint(max_entries, 2048);
+} currct SEC(".maps");
 
 // Map holding configuration values for this BPF program.
 // Indexed by enum o_config.
-struct bpf_map_def SEC("maps/config") config = {
-  .type = BPF_MAP_TYPE_ARRAY,
-  .key_size = sizeof(enum o_config),
-  .value_size = sizeof(u64),
-  .max_entries = ConfigMax,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, enum o_config);
+    __type(value, __u64);
+    __uint(max_entries, ConfigMax);
+} config SEC(".maps");
 
 // Array holding pairs of (age, interval) values,
 // used for age-based rate limiting.
 // Indexed by enum o_config_ratecurve.
-struct bpf_map_def SEC("maps/config_ratecurve") config_ratecurve = {
-  .type = BPF_MAP_TYPE_ARRAY,
-  .key_size = sizeof(enum o_config_ratecurve),
-  .value_size = sizeof(u64),
-  .max_entries = ConfigCurveMax,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, enum o_config_ratecurve);
+    __type(value, __u64);
+    __uint(max_entries, ConfigCurveMax);
+} config_ratecurve SEC(".maps");
 
 // probe_ready reads the `config` array map for the Ready flag.
 // It returns true if the Ready flag is set to 0x90 (go).
@@ -167,9 +165,9 @@ static __always_inline u32 flow_status(struct nf_conn *ct) {
   return status;
 }
 
-// extract_counters extracts accounting info from an nf_conn into acct_event_t.
+// extract_counters extracts accounting info from an nf_conn into event_t.
 // Returns 0 if acct extension was present in ct.
-static __always_inline int extract_counters(struct acct_event_t *data, struct nf_conn *ct) {
+static __always_inline int extract_counters(struct event_t *data, struct nf_conn *ct) {
 
   struct nf_conn_acct *acct_ext = 0;
   if (get_acct_ext(&acct_ext, ct))
@@ -188,8 +186,8 @@ static __always_inline int extract_counters(struct acct_event_t *data, struct nf
 }
 
 // extract_tstamp extracts the start timestamp of nf_conn_tstamp inside an nf_conn
-// into acct_event_t. Returns 0 if timestamp extension was present in ct.
-static __always_inline int extract_tstamp(struct acct_event_t *data, struct nf_conn *ct) {
+// into event_t. Returns 0 if timestamp extension was present in ct.
+static __always_inline int extract_tstamp(struct event_t *data, struct nf_conn *ct) {
 
   struct nf_conn_tstamp *ts_ext = 0;
   if (get_ts_ext(&ts_ext, ct))
@@ -201,8 +199,8 @@ static __always_inline int extract_tstamp(struct acct_event_t *data, struct nf_c
 }
 
 // extract_tuple extracts tuple information (proto, src/dest ip and port) of an nf_conn
-// into an acct_event_t.
-static __always_inline void extract_tuple(struct acct_event_t *data, struct nf_conn *ct) {
+// into an event_t.
+static __always_inline void extract_tuple(struct event_t *data, struct nf_conn *ct) {
 
   struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];
   bpf_probe_read(&tuplehash, sizeof(tuplehash), &ct->tuplehash);
@@ -216,8 +214,8 @@ static __always_inline void extract_tuple(struct acct_event_t *data, struct nf_c
   data->dstport = tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
 }
 
-// extract_netns extracts the nf_conn's network namespace inode number into an acct_event_t.
-static __always_inline void extract_netns(struct acct_event_t *data, struct nf_conn *ct) {
+// extract_netns extracts the nf_conn's network namespace inode number into an event_t.
+static __always_inline void extract_netns(struct event_t *data, struct nf_conn *ct) {
 
   // Obtain reference to network namespace.
   // Warning: ct_net is a possible_net_t with a single member,
@@ -369,7 +367,7 @@ static __always_inline u64 flow_sample_update(struct nf_conn *ct, u64 ts, struct
     return 0;
 
   // Allocate event struct after all checks have succeeded.
-  struct acct_event_t data = {
+  struct event_t data = {
     .start = 0,
     .ts = ts,
     .cptr = (u64)ct,
@@ -425,7 +423,7 @@ static __always_inline u64 flow_sample_destroy(struct nf_conn *ct, u64 ts, struc
   if (flow_status(ct) == 0)
     return 0;
 
-  struct acct_event_t data = {
+  struct event_t data = {
     .start = 0,
     .ts = ts,
     .cptr = (u64)ct,
@@ -456,14 +454,11 @@ static __always_inline u64 flow_sample_destroy(struct nf_conn *ct, u64 ts, struc
 // we check if the 'status' field is non-zero to avoid sampling packets that
 // still need to undergo some policy processing.
 SEC("kprobe/__nf_conntrack_hash_insert")
-int kprobe____nf_conntrack_hash_insert(struct pt_regs *ctx) {
-
+int BPF_KPROBE(kprobe____nf_conntrack_hash_insert, struct nf_conn* ct) {
   if (!probe_ready())
     return 0;
 
   u64 ts = bpf_ktime_get_ns();
-
-  struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
 
   return flow_sample_update(ct, ts, ctx);
 }
@@ -471,12 +466,9 @@ int kprobe____nf_conntrack_hash_insert(struct pt_regs *ctx) {
 // Top half of the update sampler. Stash the nf_conn pointer to later process
 // in a kretprobe after the counters have been updated.
 SEC("kprobe/__nf_ct_refresh_acct")
-int kprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
-
+int BPF_KPROBE(kprobe____nf_ct_refresh_acct, struct nf_conn* ct) {
   if (!probe_ready())
     return 0;
-
-  struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
 
   u32 pid = bpf_get_current_pid_tgid();
 
@@ -488,8 +480,7 @@ int kprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
 
 // Bottom half of the update sampler. Extract accounting data from the nf_conn.
 SEC("kretprobe/__nf_ct_refresh_acct")
-int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
-
+int BPF_KRETPROBE(kretprobe____nf_ct_refresh_acct) {
   if (!probe_ready())
     return 0;
 
@@ -512,14 +503,11 @@ int kretprobe____nf_ct_refresh_acct(struct pt_regs *ctx) {
 // Sample destroy events. This probe sends destroy events to userspace as well
 // as cleaning up internal rate limiting bookkeeping for the nf_conn.
 SEC("kprobe/nf_ct_delete")
-int kprobe__nf_ct_delete(struct pt_regs *ctx) {
-
+int BPF_KPROBE(kprobe__nf_ct_delete, struct nf_conn* ct) {
   if (!probe_ready())
     return 0;
 
   u64 ts = bpf_ktime_get_ns();
-
-  struct nf_conn *ct = (struct nf_conn *) PT_REGS_PARM1(ctx);
 
   // Remove references to this nf_conn from bookkeeping.
   flow_cleanup(ct);
