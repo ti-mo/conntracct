@@ -1,6 +1,6 @@
 module github.com/ti-mo/conntracct
 
-go 1.25
+go 1.25.0
 
 replace github.com/cilium/ebpf => github.com/ti-mo/ebpf v0.0.0-20200331133758-a258b0c67078
 
@@ -25,8 +25,8 @@ require (
 	github.com/stretchr/testify v1.2.2
 	github.com/ti-mo/kconfig v0.0.0-20181208153747-0708bf82969f
 	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
-	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
-	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9
+	golang.org/x/sync v0.22.0
+	golang.org/x/sys v0.47.0
 	lukechampine.com/blake3 v0.4.0
 )
 
@@ -46,11 +46,17 @@ require (
 	github.com/spf13/cast v1.3.0 // indirect
 	github.com/spf13/jwalterweatherman v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
-	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2 // indirect
-	golang.org/x/net v0.0.0-20191028085509-fe3aa8a45271 // indirect
-	golang.org/x/text v0.3.2 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
 
-tool github.com/magefile/mage
+tool (
+	github.com/magefile/mage
+	golang.org/x/tools/cmd/stringer
+)

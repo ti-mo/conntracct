@@ -21,8 +21,9 @@ const _SinkType_name = "DummyStdOutStdErrInfluxUDPInfluxHTTPElastic"
 var _SinkType_index = [...]uint8{0, 5, 11, 17, 26, 36, 43}
 
 func (i SinkType) String() string {
-	if i >= SinkType(len(_SinkType_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_SinkType_index)-1 {
 		return "SinkType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _SinkType_name[_SinkType_index[i]:_SinkType_index[i+1]]
+	return _SinkType_name[_SinkType_index[idx]:_SinkType_index[idx+1]]
 }
