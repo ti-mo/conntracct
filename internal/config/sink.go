@@ -57,6 +57,9 @@ type SinkConfig struct {
 
 	// Write timeout of the sink's backing storage.
 	Timeout time.Duration `mapstructure:"timeout"`
+
+	// Only write latest values or store all timestamped values.
+	LatestValues bool `mapstructure:"latestValues"`
 }
 
 // DecodeSinkConfigMap extracts a map of SinkConfigs from configuration data.
@@ -117,6 +120,8 @@ func stringToSinkTypeHookFunc() mapstructure.DecodeHookFunc {
 			return types.InfluxHTTP, nil
 		case "elastic", "elasticsearch":
 			return types.Elastic, nil
+		case "clickhouse":
+			return types.Clickhouse, nil
 		default:
 			return types.SinkType(0), fmt.Errorf("failed parsing sink type %v", data)
 		}

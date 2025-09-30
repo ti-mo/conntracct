@@ -50,6 +50,22 @@ sinks:
     # username: my-username            # basic HTTP auth username
     # password: my-password            # basic HTTP auth password
 
+  clickhouse-timeseries:
+    type: clickhouse
+    address: "localhost:9000"          # clichouse client connection without protocol://
+    # database: conntracct-<hostname>  # clickhouse database to use
+    # username: my-username            # clickhouse auth username
+    # password: my-password            # clickhouse auth password
+    latestValues: false
+
+  clickhouse-latest:
+    type: clickhouse
+    address: "localhost:9000"          # clichouse client connection without protocol://
+    # database: conntracct-<hostname>  # clickhouse database to use
+    # username: my-username            # clickhouse auth username
+    # password: my-password            # clickhouse auth password
+    latestValues: true
+
   stdout:
     type: stdout
 
