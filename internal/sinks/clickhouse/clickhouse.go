@@ -69,12 +69,12 @@ func (s *ClickhouseSink) Init(sc config.SinkConfig) error {
 	s.latestValues = sc.LatestValues
 
 	if s.latestValues {
-		// install database scheme for event time series tracking
+		// install database scheme for latest entry tracking
 		if err := s.installLatestSchema(sc.Database); err != nil {
 			log.WithField("sink", sc.Name).Fatalf("error configuring timeseries schema: %s", err.Error())
 		}
 	} else {
-		// Intstall database schema for latest state tracking
+		// Intstall database schema for timestamped state tracking
 		if err := s.installTimeseriesSchema(sc.Database); err != nil {
 			log.WithField("sink", sc.Name).Fatalf("error configuring latest schema: %s", err.Error())
 		}

@@ -58,7 +58,7 @@ type SinkConfig struct {
 	// Write timeout of the sink's backing storage.
 	Timeout time.Duration `mapstructure:"timeout"`
 
-	// Write timeout of the sink's backing storage.
+	// Only write latest values or store all timestamped values.
 	LatestValues bool `mapstructure:"latestValues"`
 }
 
