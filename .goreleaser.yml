@@ -5,14 +5,7 @@ before:
     - mage generate
 
 builds:
-- ldflags:
-    - -s -w
-    - -X github.com/ti-mo/conntracct/cmd.version={{.Version}}
-    - -X github.com/ti-mo/conntracct/cmd.commit={{.Commit}}
-    - -X github.com/ti-mo/conntracct/cmd.date={{.Date}}
-    - -X github.com/ti-mo/conntracct/cmd.builtBy=goreleaser
-    - -X "github.com/ti-mo/conntracct/cmd.goversion={{.Env.GOVERSION}}"
-  goos:
+- goos:
     - linux
   goarch:
     - amd64

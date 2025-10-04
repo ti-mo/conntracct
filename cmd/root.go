@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime/debug"
 
 	homedir "github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
@@ -12,19 +13,39 @@ import (
 	"github.com/spf13/viper"
 )
 
+func init() {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		panic("No BuildInfo found in binary")
+	}
+
+	rev := findSetting(bi, "vcs.revision")
+	if findSetting(bi, "vcs.modified") == "true" {
+		rev += " (dev)"
+	}
+	time := findSetting(bi, "vcs.time")
+	goos := findSetting(bi, "GOOS")
+	goarch := findSetting(bi, "GOARCH")
+
+	buildInfo = fmt.Sprintf("%s built on %s with %s for %s/%s", rev, time, bi.GoVersion, goos, goarch)
+}
+
+func findSetting(bi *debug.BuildInfo, key string) string {
+	for _, s := range bi.Settings {
+		if s.Key != key {
+			continue
+		}
+		return s.Value
+	}
+	return ""
+}
+
 var (
 	appName   = "conntracct"
-	version   = "dev"
-	commit    = "none"
-	date      = "unknown"
-	builtBy   = "mage"
-	goversion = "unknown"
-
-	buildInfo     = fmt.Sprintf("%s version %s, commit %s", appName, version, commit)
-	buildInfoLong = fmt.Sprintf("%s version %s, commit %s, built on %s by %s with %s", appName, version, commit, date, builtBy, goversion)
+	buildInfo string
 
 	cfgFile string
-	debug   bool
+	dbg     bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -57,7 +78,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "",
 		"config file (default conntracct.yml in $HOME/.config/ or /etc/conntracct/)")
-	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug logging")
+	rootCmd.PersistentFlags().BoolVarP(&dbg, "debug", "d", false, "enable debug logging")
 
 	rootCmd.AddCommand(versionCmd)
 }
@@ -99,12 +120,12 @@ func initConfig() {
 // flags have been bound.
 func rootPreRun(*cobra.Command, []string) {
 	// Enable debug logging if debug flag enabled.
-	if debug {
+	if dbg {
 		log.SetLevel(log.DebugLevel)
 	}
 }
 
-// printVersion prints the app's version string to stdout.
+// printVersion prints the app's build info to stdout.
 func printVersion(cmd *cobra.Command, args []string) {
-	fmt.Println(buildInfoLong)
+	fmt.Println(buildInfo)
 }
