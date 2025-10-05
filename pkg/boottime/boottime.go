@@ -25,9 +25,10 @@ func init() {
 	go worker()
 }
 
+// https://github.com/golang/go/issues/24595
+//
 //go:noescape
 //go:linkname nanotime runtime.nanotime
-// https://github.com/golang/go/issues/24595
 func nanotime() int64
 
 // Estimate attempts to estimate the absolute genesis time stamp

@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/ti-mo/conntracct/internal/sinks/types"
@@ -9,7 +10,6 @@ import (
 
 // HandleStats returns statistics about the application in JSON format.
 func HandleStats(w http.ResponseWriter, r *http.Request) {
-
 	probe := pipe.ProbeStats()
 	pline := pipe.Stats()
 
@@ -27,11 +27,11 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 	out, err := json.Marshal(s)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		write(w, err.Error())
+		fmt.Fprintf(w, "marshal json: %s", err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	write(w, "%s", out)
+	fmt.Fprint(w, string(out))
 }
