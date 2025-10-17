@@ -13,7 +13,7 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type acctEventT struct {
+type acctEvent struct {
 	_       structs.HostLayout
 	Start   uint64
 	Ts      uint64
@@ -57,6 +57,22 @@ const (
 	acctO_configRatecurveConfigCurveMax       acctO_configRatecurve = 6
 )
 
+// Names of all BPF objects in the ELF.
+//
+// Used for safe lookups in a Collection or CollectionSpec.
+const (
+	acctMapConfig          = "config"
+	acctMapConfigRatecurve = "config_ratecurve"
+	acctMapFlowCooldown    = "flow_cooldown"
+	acctMapFlowOrigin      = "flow_origin"
+	acctMapPerfAcctEnd     = "perf_acct_end"
+	acctMapPerfAcctUpdate  = "perf_acct_update"
+	acctProgCtDestroy      = "ct_destroy"
+	acctProgCtNew          = "ct_new"
+	acctProgCtUpdate       = "ct_update"
+	acctVarReadyVal        = "ready_val"
+)
+
 // loadAcct returns the embedded CollectionSpec for acct.
 func loadAcct() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_AcctBytes)
@@ -77,7 +93,7 @@ func loadAcct() (*ebpf.CollectionSpec, error) {
 //	*acctMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
-func loadAcctObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
+func loadAcctObjects(obj any, opts *ebpf.CollectionOptions) error {
 	spec, err := loadAcct()
 	if err != nil {
 		return err
@@ -99,10 +115,9 @@ type acctSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type acctProgramSpecs struct {
-	KprobeNfConntrackHashInsert *ebpf.ProgramSpec `ebpf:"kprobe____nf_conntrack_hash_insert"`
-	KprobeNfCtRefreshAcct       *ebpf.ProgramSpec `ebpf:"kprobe____nf_ct_refresh_acct"`
-	KprobeNfCtDelete            *ebpf.ProgramSpec `ebpf:"kprobe__nf_ct_delete"`
-	KretprobeNfCtRefreshAcct    *ebpf.ProgramSpec `ebpf:"kretprobe____nf_ct_refresh_acct"`
+	CtDestroy *ebpf.ProgramSpec `ebpf:"ct_destroy"`
+	CtNew     *ebpf.ProgramSpec `ebpf:"ct_new"`
+	CtUpdate  *ebpf.ProgramSpec `ebpf:"ct_update"`
 }
 
 // acctMapSpecs contains maps before they are loaded into the kernel.
@@ -111,7 +126,6 @@ type acctProgramSpecs struct {
 type acctMapSpecs struct {
 	Config          *ebpf.MapSpec `ebpf:"config"`
 	ConfigRatecurve *ebpf.MapSpec `ebpf:"config_ratecurve"`
-	Currct          *ebpf.MapSpec `ebpf:"currct"`
 	FlowCooldown    *ebpf.MapSpec `ebpf:"flow_cooldown"`
 	FlowOrigin      *ebpf.MapSpec `ebpf:"flow_origin"`
 	PerfAcctEnd     *ebpf.MapSpec `ebpf:"perf_acct_end"`
@@ -147,7 +161,6 @@ func (o *acctObjects) Close() error {
 type acctMaps struct {
 	Config          *ebpf.Map `ebpf:"config"`
 	ConfigRatecurve *ebpf.Map `ebpf:"config_ratecurve"`
-	Currct          *ebpf.Map `ebpf:"currct"`
 	FlowCooldown    *ebpf.Map `ebpf:"flow_cooldown"`
 	FlowOrigin      *ebpf.Map `ebpf:"flow_origin"`
 	PerfAcctEnd     *ebpf.Map `ebpf:"perf_acct_end"`
@@ -158,7 +171,6 @@ func (m *acctMaps) Close() error {
 	return _AcctClose(
 		m.Config,
 		m.ConfigRatecurve,
-		m.Currct,
 		m.FlowCooldown,
 		m.FlowOrigin,
 		m.PerfAcctEnd,
@@ -177,18 +189,16 @@ type acctVariables struct {
 //
 // It can be passed to loadAcctObjects or ebpf.CollectionSpec.LoadAndAssign.
 type acctPrograms struct {
-	KprobeNfConntrackHashInsert *ebpf.Program `ebpf:"kprobe____nf_conntrack_hash_insert"`
-	KprobeNfCtRefreshAcct       *ebpf.Program `ebpf:"kprobe____nf_ct_refresh_acct"`
-	KprobeNfCtDelete            *ebpf.Program `ebpf:"kprobe__nf_ct_delete"`
-	KretprobeNfCtRefreshAcct    *ebpf.Program `ebpf:"kretprobe____nf_ct_refresh_acct"`
+	CtDestroy *ebpf.Program `ebpf:"ct_destroy"`
+	CtNew     *ebpf.Program `ebpf:"ct_new"`
+	CtUpdate  *ebpf.Program `ebpf:"ct_update"`
 }
 
 func (p *acctPrograms) Close() error {
 	return _AcctClose(
-		p.KprobeNfConntrackHashInsert,
-		p.KprobeNfCtRefreshAcct,
-		p.KprobeNfCtDelete,
-		p.KretprobeNfCtRefreshAcct,
+		p.CtDestroy,
+		p.CtNew,
+		p.CtUpdate,
 	)
 }
 

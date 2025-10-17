@@ -6,31 +6,10 @@ import (
 	"os"
 	"sync"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 )
-
-var (
-	nfCTHashInsert  string
-	nfCTRefreshAcct string
-	nfCTDelete      string
-)
-
-func init() {
-	spec, err := loadAcct()
-	if err != nil {
-		panic(err)
-	}
-
-	var specs acctSpecs
-	if err := spec.Assign(&specs); err != nil {
-		panic(err)
-	}
-
-	nfCTHashInsert = specs.KprobeNfConntrackHashInsert.AttachTo
-	nfCTRefreshAcct = specs.KprobeNfCtRefreshAcct.AttachTo
-	nfCTDelete = specs.KprobeNfCtDelete.AttachTo
-}
 
 // Probe is an instance of a BPF probe running in the kernel.
 type Probe struct {
@@ -58,7 +37,12 @@ type Probe struct {
 // Loads the BPF program into the kernel but does not attach its kprobes yet.
 func NewProbe(cfg Config) (*Probe, error) {
 	var objs acctObjects
-	if err := loadAcctObjects(&objs, nil); err != nil {
+	err := loadAcctObjects(&objs, nil)
+	var ve *ebpf.VerifierError
+	if errors.As(err, &ve) {
+		return nil, fmt.Errorf("verifier error loading acct objects: %+v", ve)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("loading acct objects: %w", err)
 	}
 
@@ -102,27 +86,21 @@ func (ap *Probe) Start() error {
 	go ap.updateWorker()
 	go ap.destroyWorker()
 
-	l, err := link.Kprobe(nfCTHashInsert, ap.objs.KprobeNfConntrackHashInsert, nil)
+	l, err := link.AttachTracing(link.TracingOptions{Program: ap.objs.CtNew})
 	if err != nil {
-		return fmt.Errorf("attach kprobe %s: %w", nfCTHashInsert, err)
+		return fmt.Errorf("attach new %s: %w", ap.objs.CtNew, err)
 	}
 	ap.links = append(ap.links, l)
 
-	l, err = link.Kprobe(nfCTRefreshAcct, ap.objs.KprobeNfCtRefreshAcct, nil)
+	l, err = link.AttachTracing(link.TracingOptions{Program: ap.objs.CtUpdate})
 	if err != nil {
-		return fmt.Errorf("attach kprobe %s: %w", nfCTRefreshAcct, err)
+		return fmt.Errorf("attach update %s: %w", ap.objs.CtUpdate, err)
 	}
 	ap.links = append(ap.links, l)
 
-	l, err = link.Kretprobe(nfCTRefreshAcct, ap.objs.KretprobeNfCtRefreshAcct, nil)
+	l, err = link.AttachTracing(link.TracingOptions{Program: ap.objs.CtDestroy})
 	if err != nil {
-		return fmt.Errorf("attach kretprobe %s: %w", nfCTRefreshAcct, err)
-	}
-	ap.links = append(ap.links, l)
-
-	l, err = link.Kprobe(nfCTDelete, ap.objs.KprobeNfCtDelete, nil)
-	if err != nil {
-		return fmt.Errorf("attach kprobe %s: %w", nfCTDelete, err)
+		return fmt.Errorf("attach destroy %s: %w", ap.objs.CtDestroy, err)
 	}
 	ap.links = append(ap.links, l)
 

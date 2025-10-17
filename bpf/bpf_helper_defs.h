@@ -52,20 +52,6 @@ static long (* const bpf_map_update_elem)(void *map, const void *key, const void
 static long (* const bpf_map_delete_elem)(void *map, const void *key) = (void *) 3;
 
 /*
- * bpf_probe_read
- *
- * 	For tracing programs, safely attempt to read *size* bytes from
- * 	kernel space address *unsafe_ptr* and store the data in *dst*.
- *
- * 	Generally, use **bpf_probe_read_user**\ () or
- * 	**bpf_probe_read_kernel**\ () instead.
- *
- * Returns
- * 	0 on success, or a negative error in case of failure.
- */
-static long (* const bpf_probe_read)(void *dst, __u32 size, const void *unsafe_ptr) = (void *) 4;
-
-/*
  * bpf_ktime_get_ns
  *
  * 	Return the time elapsed since system boot, in nanoseconds.
@@ -201,3 +187,14 @@ static __u64 (* const bpf_get_current_pid_tgid)(void) = (void *) 14;
  * 	0 on success, or a negative error in case of failure.
  */
 static long (* const bpf_perf_event_output)(void *ctx, void *map, __u64 flags, void *data, __u64 size) = (void *) 25;
+
+/*
+ * bpf_probe_read_kernel
+ *
+ * 	Safely attempt to read *size* bytes from kernel space address
+ * 	*unsafe_ptr* and store the data in *dst*.
+ *
+ * Returns
+ * 	0 on success, or a negative error in case of failure.
+ */
+static long (* const bpf_probe_read_kernel)(void *dst, __u32 size, const void *unsafe_ptr) = (void *) 113;

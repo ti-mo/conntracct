@@ -2,70 +2,58 @@
 
 #define __VMLINUX_H__
 
+enum {
+        false = 0,
+        true = 1,
+};
+
+typedef _Bool bool;
+
+typedef unsigned char __u8;
+typedef __u8 u8;
+typedef u8 u_int8_t;
+
+typedef short unsigned int __u16;
+typedef __u16 __be16;
+typedef __u16 u16;
+typedef u16 u_int16_t;
+
+typedef unsigned int __u32;
+typedef __u32 __be32;
+typedef __u32 u32;
+typedef u32 u_int32_t;
+
+typedef long long unsigned int __u64;
+typedef __u64 __be64;
+typedef __u64 u64;
+typedef u64 u_int64_t;
+
+typedef long long int __s64;
+typedef __s64 s64;
+
+enum bpf_map_type {
+	BPF_MAP_TYPE_HASH = 1,
+	BPF_MAP_TYPE_ARRAY = 2,
+	BPF_MAP_TYPE_PERF_EVENT_ARRAY = 4,
+};
+
+enum {
+        BPF_ANY = 0,
+        BPF_NOEXIST = 1,
+};
+
+enum {
+	BPF_F_INDEX_MASK		= 0xffffffffULL,
+	BPF_F_CURRENT_CPU		= BPF_F_INDEX_MASK,
+};
+
 #ifndef BPF_NO_PRESERVE_ACCESS_INDEX
 #pragma clang attribute push (__attribute__((preserve_access_index)), apply_to = record)
 #endif
 
-struct fred_cs {
-	u64 cs: 16;
-	u64 sl: 2;
-	u64 wfe: 1;
-};
-
-struct fred_ss {
-	u64 ss: 16;
-	u64 sti: 1;
-	u64 swevent: 1;
-	u64 nmi: 1;
-	int: 13;
-	u64 vector: 8;
-	short: 8;
-	u64 type: 4;
-	char: 4;
-	u64 enclave: 1;
-	u64 lm: 1;
-	u64 nested: 1;
-	char: 1;
-	u64 insnlen: 4;
-};
-
-struct pt_regs {
-	long unsigned int r15;
-	long unsigned int r14;
-	long unsigned int r13;
-	long unsigned int r12;
-	long unsigned int bp;
-	long unsigned int bx;
-	long unsigned int r11;
-	long unsigned int r10;
-	long unsigned int r9;
-	long unsigned int r8;
-	long unsigned int ax;
-	long unsigned int cx;
-	long unsigned int dx;
-	long unsigned int si;
-	long unsigned int di;
-	long unsigned int orig_ax;
-	long unsigned int ip;
-	union {
-		u16 cs;
-		u64 csx;
-		struct fred_cs fred_cs;
-	};
-	long unsigned int flags;
-	long unsigned int sp;
-	union {
-		u16 ss;
-		u64 ssx;
-		struct fred_ss fred_ss;
-	};
-};
-
-struct user_pt_regs {
-	__u64		regs[31];
-	__u64		sp;
-	__u64		pc;
-	__u64		pstate;
+enum ip_conntrack_status {
+	IPS_CONFIRMED = 8,
+	IPS_DYING = 512,
 };
 
 struct in_addr {
@@ -80,6 +68,10 @@ struct in6_addr {
 	} in6_u;
 };
 
+struct sk_buff {
+	long unsigned int _nfct;
+};
+
 union nf_inet_addr {
 	__u32 all[4];
 	__be32 ip;
@@ -90,24 +82,6 @@ union nf_inet_addr {
 
 union nf_conntrack_man_proto {
 	__be16 all;
-	struct {
-		__be16 port;
-	} tcp;
-	struct {
-		__be16 port;
-	} udp;
-	struct {
-		__be16 id;
-	} icmp;
-	struct {
-		__be16 port;
-	} dccp;
-	struct {
-		__be16 port;
-	} sctp;
-	struct {
-		__be16 key;
-	} gre;
 };
 
 struct nf_conntrack_man {
@@ -156,7 +130,6 @@ typedef struct {
 } possible_net_t;
 
 struct nf_conn {
-	u32 timeout;
 	struct nf_conntrack_tuple_hash tuplehash[2];
 	long unsigned int status;
 	possible_net_t ct_net;

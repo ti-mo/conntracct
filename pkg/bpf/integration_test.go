@@ -87,7 +87,6 @@ func TestMain(m *testing.M) {
 // Checks if the first packet in a flow is logged, and that
 // a further read from the channel times out.
 func TestProbeFirstPacket(t *testing.T) {
-
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
 
