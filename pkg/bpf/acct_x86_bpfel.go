@@ -13,6 +13,12 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type acctCurvePoint struct {
+	_        structs.HostLayout
+	Age      uint64
+	Interval uint64
+}
+
 type acctEvent struct {
 	_       structs.HostLayout
 	Start   uint64
@@ -38,39 +44,20 @@ type acctEvent struct {
 	_           [3]byte
 }
 
-type acctO_config uint32
-
-const (
-	acctO_configConfigReady acctO_config = 0
-	acctO_configConfigMax   acctO_config = 1
-)
-
-type acctO_configRatecurve uint32
-
-const (
-	acctO_configRatecurveConfigCurve0Age      acctO_configRatecurve = 0
-	acctO_configRatecurveConfigCurve0Interval acctO_configRatecurve = 1
-	acctO_configRatecurveConfigCurve1Age      acctO_configRatecurve = 2
-	acctO_configRatecurveConfigCurve1Interval acctO_configRatecurve = 3
-	acctO_configRatecurveConfigCurve2Age      acctO_configRatecurve = 4
-	acctO_configRatecurveConfigCurve2Interval acctO_configRatecurve = 5
-	acctO_configRatecurveConfigCurveMax       acctO_configRatecurve = 6
-)
-
 // Names of all BPF objects in the ELF.
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	acctMapConfig          = "config"
-	acctMapConfigRatecurve = "config_ratecurve"
-	acctMapFlowCooldown    = "flow_cooldown"
-	acctMapFlowOrigin      = "flow_origin"
-	acctMapPerfAcctEnd     = "perf_acct_end"
-	acctMapPerfAcctUpdate  = "perf_acct_update"
-	acctProgCtDestroy      = "ct_destroy"
-	acctProgCtNew          = "ct_new"
-	acctProgCtUpdate       = "ct_update"
-	acctVarReadyVal        = "ready_val"
+	acctMapFlowCooldown   = "flow_cooldown"
+	acctMapFlowOrigin     = "flow_origin"
+	acctMapPerfAcctEnd    = "perf_acct_end"
+	acctMapPerfAcctUpdate = "perf_acct_update"
+	acctProgCtDestroy     = "ct_destroy"
+	acctProgCtNew         = "ct_new"
+	acctProgCtUpdate      = "ct_update"
+	acctVarCurve0         = "curve0"
+	acctVarCurve1         = "curve1"
+	acctVarCurve2         = "curve2"
 )
 
 // loadAcct returns the embedded CollectionSpec for acct.
@@ -124,19 +111,19 @@ type acctProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type acctMapSpecs struct {
-	Config          *ebpf.MapSpec `ebpf:"config"`
-	ConfigRatecurve *ebpf.MapSpec `ebpf:"config_ratecurve"`
-	FlowCooldown    *ebpf.MapSpec `ebpf:"flow_cooldown"`
-	FlowOrigin      *ebpf.MapSpec `ebpf:"flow_origin"`
-	PerfAcctEnd     *ebpf.MapSpec `ebpf:"perf_acct_end"`
-	PerfAcctUpdate  *ebpf.MapSpec `ebpf:"perf_acct_update"`
+	FlowCooldown   *ebpf.MapSpec `ebpf:"flow_cooldown"`
+	FlowOrigin     *ebpf.MapSpec `ebpf:"flow_origin"`
+	PerfAcctEnd    *ebpf.MapSpec `ebpf:"perf_acct_end"`
+	PerfAcctUpdate *ebpf.MapSpec `ebpf:"perf_acct_update"`
 }
 
 // acctVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type acctVariableSpecs struct {
-	ReadyVal *ebpf.VariableSpec `ebpf:"ready_val"`
+	Curve0 *ebpf.VariableSpec `ebpf:"curve0"`
+	Curve1 *ebpf.VariableSpec `ebpf:"curve1"`
+	Curve2 *ebpf.VariableSpec `ebpf:"curve2"`
 }
 
 // acctObjects contains all objects after they have been loaded into the kernel.
@@ -159,18 +146,14 @@ func (o *acctObjects) Close() error {
 //
 // It can be passed to loadAcctObjects or ebpf.CollectionSpec.LoadAndAssign.
 type acctMaps struct {
-	Config          *ebpf.Map `ebpf:"config"`
-	ConfigRatecurve *ebpf.Map `ebpf:"config_ratecurve"`
-	FlowCooldown    *ebpf.Map `ebpf:"flow_cooldown"`
-	FlowOrigin      *ebpf.Map `ebpf:"flow_origin"`
-	PerfAcctEnd     *ebpf.Map `ebpf:"perf_acct_end"`
-	PerfAcctUpdate  *ebpf.Map `ebpf:"perf_acct_update"`
+	FlowCooldown   *ebpf.Map `ebpf:"flow_cooldown"`
+	FlowOrigin     *ebpf.Map `ebpf:"flow_origin"`
+	PerfAcctEnd    *ebpf.Map `ebpf:"perf_acct_end"`
+	PerfAcctUpdate *ebpf.Map `ebpf:"perf_acct_update"`
 }
 
 func (m *acctMaps) Close() error {
 	return _AcctClose(
-		m.Config,
-		m.ConfigRatecurve,
 		m.FlowCooldown,
 		m.FlowOrigin,
 		m.PerfAcctEnd,
@@ -182,7 +165,9 @@ func (m *acctMaps) Close() error {
 //
 // It can be passed to loadAcctObjects or ebpf.CollectionSpec.LoadAndAssign.
 type acctVariables struct {
-	ReadyVal *ebpf.Variable `ebpf:"ready_val"`
+	Curve0 *ebpf.Variable `ebpf:"curve0"`
+	Curve1 *ebpf.Variable `ebpf:"curve1"`
+	Curve2 *ebpf.Variable `ebpf:"curve2"`
 }
 
 // acctPrograms contains all programs after they have been loaded into the kernel.

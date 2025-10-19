@@ -36,8 +36,20 @@ type Probe struct {
 // NewProbe instantiates a Probe using the given Config.
 // Loads the BPF program into the kernel but does not attach its kprobes yet.
 func NewProbe(cfg Config) (*Probe, error) {
+	spec, err := loadAcct()
+	if err != nil {
+		return nil, fmt.Errorf("loading acct specs: %w", err)
+	}
+	var specs acctSpecs
+	if err := spec.Assign(&specs); err != nil {
+		return nil, fmt.Errorf("assigning acct specs: %w", err)
+	}
+	if err := configure(&specs, cfg); err != nil {
+		return nil, fmt.Errorf("configure acct specs: %w", err)
+	}
+
 	var objs acctObjects
-	err := loadAcctObjects(&objs, nil)
+	err = spec.LoadAndAssign(&objs, nil)
 	var ve *ebpf.VerifierError
 	if errors.As(err, &ve) {
 		return nil, fmt.Errorf("verifier error loading acct objects: %+v", ve)
@@ -49,10 +61,6 @@ func NewProbe(cfg Config) (*Probe, error) {
 	ap := Probe{
 		objs:  &objs,
 		stats: &ProbeStats{},
-	}
-
-	if err := ap.configure(cfg); err != nil {
-		return nil, fmt.Errorf("configure probe: %w", err)
 	}
 
 	return &ap, nil

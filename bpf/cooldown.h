@@ -18,36 +18,13 @@ struct {
     __uint(max_entries, 65535);
 } flow_cooldown SEC(".maps");
 
-enum o_config_ratecurve {
-  ConfigCurve0Age,
-  ConfigCurve0Interval,
-  ConfigCurve1Age,
-  ConfigCurve1Interval,
-  ConfigCurve2Age,
-  ConfigCurve2Interval,
-  ConfigCurveMax,
+struct curve_point {
+  u64 age, interval;
 };
 
-// Array holding pairs of (age, interval) values,
-// used for age-based rate limiting.
-// Indexed by enum o_config_ratecurve.
-struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __type(key, enum o_config_ratecurve);
-    __type(value, __u64);
-    __uint(max_entries, ConfigCurveMax);
-} config_ratecurve SEC(".maps");
-
-// curve_get returns an entry from the curve array as a signed 64-bit integer.
-// Returns negative if an entry was not found at the requested index.
-static __always_inline s64 curve_get(enum o_config_ratecurve curve_enum) {
-  int offset = curve_enum;
-  u64 *confp = bpf_map_lookup_elem(&config_ratecurve, &offset);
-  if (confp)
-    return *confp;
-
-  return -1;
-}
+volatile const struct curve_point curve0;
+volatile const struct curve_point curve1;
+volatile const struct curve_point curve2;
 
 // flow_cooldown_expired returns true if the flow's cooldown period is over.
 static __always_inline bool flow_cooldown_expired(struct nf_conn *ct, u64 ts) {
@@ -88,25 +65,19 @@ static __always_inline s64 flow_get_interval(struct nf_conn *ct, u64 ts) {
 
   // Don't consider flows that are under a minimum age.
   // Return negative interval to signal that the event should be dropped.
-  s64 curve0_age = curve_get(ConfigCurve0Age);
-  if (curve0_age < 0) return -1;
-  if (age < curve0_age)
+  if (age < curve0.age)
     return -1;
 
   // Between age 0 and age 1, use interval 0.
-  s64 curve1_age = curve_get(ConfigCurve1Age);
-  if (curve1_age < 0) return -1;
-  if (age < curve1_age)
-    return curve_get(ConfigCurve0Interval);
+  if (age < curve1.age)
+    return curve0.interval;
 
   // Between age 1 and age 2, use interval 1.
-  s64 curve2_age = curve_get(ConfigCurve2Age);
-  if (curve2_age < 0) return -1;
-  if (age < curve2_age)
-    return curve_get(ConfigCurve1Interval);
+  if (age < curve2.age)
+    return curve1.interval;
 
   // Beyond age 2, use interval 2.
-  return curve_get(ConfigCurve2Interval);
+  return curve2.interval;
 }
 
 static __always_inline u64 flow_set_cooldown(struct nf_conn *ct, u64 ts) {

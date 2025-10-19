@@ -1,14 +1,14 @@
 package bpf
 
 import (
+	"errors"
+	"fmt"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 var (
-	errCurve0Age = errors.New("Curve point 0's Age needs to be lower than point 1's and point 2's")
-	errCurve1Age = errors.New("Curve point 1's Age needs to be lower than point 2's")
+	errCurve0Age = errors.New("curve point 0's Age needs to be lower than point 1's and point 2's")
+	errCurve1Age = errors.New("curve point 1's Age needs to be lower than point 2's")
 )
 
 // Config is a configuration object for the acct BPF probe.
@@ -29,72 +29,30 @@ type CurvePoint struct {
 	Rate time.Duration
 }
 
-const (
-	readyValue = uint64(0x90) // Go!
-)
+func (p CurvePoint) marshal() *acctCurvePoint {
+	return &acctCurvePoint{
+		Age:      uint64(p.Age.Nanoseconds()),
+		Interval: uint64(p.Rate.Nanoseconds()),
+	}
+}
 
-// configOffset represents an offset in the probe's `config` BPF array.
-// Needs to be a 4 bytes long to be able to be used as a map key.
-type configOffset uint32
-
-// Enum of indices in the probe's `config` BPF array.
-const (
-	configReady configOffset = iota
-)
-
-// curveOffset represents an offset in the probe's `curve` BPF array.
-// Needs to be a 4 bytes long to be able to be used as a map key.
-type curveOffset uint32
-
-// Enum of indices in the probe's `curve` BPF array.
-const (
-	curve0Age curveOffset = iota
-	curve0Rate
-	curve1Age
-	curve1Rate
-	curve2Age
-	curve2Rate
-)
-
-// configure sets configuration values in the probe's config map.
-func (ap *Probe) configure(cfg Config) error {
+// configure configures specs using cfg.
+func configure(specs *acctSpecs, cfg Config) error {
 	// Set sane defaults on the configuration structure.
-	cfg.probeDefaults()
+	cfg.defaults()
 
 	if err := probeConfigVerify(cfg); err != nil {
-		return errors.Wrap(err, "verifying probe configuration")
+		return fmt.Errorf("verifying probe configuration: %w", err)
 	}
 
-	configMap := ap.objs.Config
-	curveMap := ap.objs.ConfigRatecurve
-
-	if err := curveMap.Put(curve0Age, cfg.Curve0.Age.Nanoseconds()); err != nil {
-		return errors.Wrap(err, "Curve0Age in config_ratecurve")
+	if err := specs.Curve0.Set(cfg.Curve0.marshal()); err != nil {
+		return fmt.Errorf("setting curve0: %w", err)
 	}
-
-	if err := curveMap.Put(curve0Rate, cfg.Curve0.Rate.Nanoseconds()); err != nil {
-		return errors.Wrap(err, "Curve0Rate in config_ratecurve")
+	if err := specs.Curve1.Set(cfg.Curve1.marshal()); err != nil {
+		return fmt.Errorf("setting curve1: %w", err)
 	}
-
-	if err := curveMap.Put(curve1Age, cfg.Curve1.Age.Nanoseconds()); err != nil {
-		return errors.Wrap(err, "Curve1Age in config_ratecurve")
-	}
-
-	if err := curveMap.Put(curve1Rate, cfg.Curve1.Rate.Nanoseconds()); err != nil {
-		return errors.Wrap(err, "Curve1Rate in config_ratecurve")
-	}
-
-	if err := curveMap.Put(curve2Age, cfg.Curve2.Age.Nanoseconds()); err != nil {
-		return errors.Wrap(err, "Curve2Age in config_ratecurve")
-	}
-
-	if err := curveMap.Put(curve2Rate, cfg.Curve2.Rate.Nanoseconds()); err != nil {
-		return errors.Wrap(err, "Curve2Rate in config_ratecurve")
-	}
-
-	// Set the ready bit in the probe's config map to make it start sending traffic.
-	if err := configMap.Put(configReady, readyValue); err != nil {
-		return errors.Wrap(err, "configReady in config")
+	if err := specs.Curve2.Set(cfg.Curve2.marshal()); err != nil {
+		return fmt.Errorf("setting curve2: %w", err)
 	}
 
 	return nil
@@ -102,8 +60,7 @@ func (ap *Probe) configure(cfg Config) error {
 
 // configureProbeDefaults manipulates the given Config to set it up with
 // default values.
-func (cfg *Config) probeDefaults() {
-
+func (cfg *Config) defaults() {
 	// Curve point 0.
 
 	// Don't touch Curve0.AgeMillis, it can remain 0.

@@ -4,15 +4,6 @@
 
 #include "acct.h"
 
-enum o_config {
-  ConfigReady,
-  ConfigMax,
-};
-
-// Magic value that userspace writes into the ConfigReady location when
-// configuration from userspace has completed.
-const int ready_val = 0x90;
-
 // perf map to send update events to userspace.
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
@@ -24,24 +15,6 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
     __type(value, struct event);
 } perf_acct_end SEC(".maps");
-
-// Map holding configuration values for this BPF program.
-// Indexed by enum o_config.
-struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __type(key, enum o_config);
-    __type(value, __u64);
-    __uint(max_entries, ConfigMax);
-} config SEC(".maps");
-
-// probe_ready reads the `config` array map for the Ready flag.
-// It returns true if the Ready flag is set to 0x90 (go).
-static __always_inline bool probe_ready() {
-  u64 oc_ready = ConfigReady;
-  u64 *rp = bpf_map_lookup_elem(&config, &oc_ready);
-
-  return (rp && *rp == ready_val);
-}
 
 // flow_sample sends an event for ct with the given type.
 static __always_inline void flow_sample(u64 *ctx, struct nf_conn *ct, enum event_type type) {
@@ -101,9 +74,6 @@ static __always_inline void flow_sample(u64 *ctx, struct nf_conn *ct, enum event
 // made.
 SEC("fexit/__nf_conntrack_confirm")
 int BPF_PROG(ct_new, struct sk_buff *skb) {
-  if (!probe_ready())
-    return 0;
-
   struct nf_conn *ct = skb_get_ct(skb);
   if (ct == NULL)
     return 0;
@@ -116,9 +86,6 @@ int BPF_PROG(ct_new, struct sk_buff *skb) {
 // __nf_ct_refresh_acct bumps acct counters.
 SEC("fexit/__nf_ct_refresh_acct")
 int BPF_PROG(ct_update, struct nf_conn *ct) {
-  if (!probe_ready())
-    return 0;
-
   flow_sample(ctx, ct, CT_UPDATE);
 
   return 0;
@@ -140,9 +107,6 @@ int BPF_PROG(ct_update, struct nf_conn *ct) {
 // in ct_valid.
 SEC("fentry/nf_conntrack_free")
 int BPF_PROG(ct_destroy, struct nf_conn *ct) {
-  if (!probe_ready())
-    return 0;
-
   flow_sample(ctx, ct, CT_DESTROY);
 
   flow_cleanup(ct);

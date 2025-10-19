@@ -100,13 +100,9 @@ static __always_inline u64 flow_initialize_origin(struct nf_conn *ct, u64 ts, u6
   if (pkts_total < 2)
     goto update;
 
-  s64 curve1_age = curve_get(ConfigCurve1Age);
-  if (curve1_age < 0)
-    goto update;
-
   // Make sure current timestamp is larger than the curve point to prevent rollover.
-  if (origin > curve1_age) {
-    origin -= curve1_age;
+  if (origin > curve1.age) {
+    origin -= curve1.age;
   } else {
     // Clamp the origin to zero (boottime of the machine).
     origin = 0;
