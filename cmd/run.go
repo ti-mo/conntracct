@@ -1,13 +1,13 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -44,16 +44,16 @@ func run(cmd *cobra.Command, args []string) error {
 	pipe := pipeline.New()
 
 	if err := initRegisterSinks(scfg, pipe); err != nil {
-		return errors.Wrap(err, "initialize and register sinks")
+		return fmt.Errorf("initialize and register sinks: %w", err)
 	}
 
 	// Initialize and start accounting pipeline.
 	if err := pipe.Init(pcfg); err != nil {
-		return errors.Wrap(err, "initialize pipeline")
+		return fmt.Errorf("initialize pipeline: %w", err)
 	}
 
 	if err := pipe.Start(); err != nil {
-		return errors.Wrap(err, "start pipeline")
+		return fmt.Errorf("start pipeline: %w", err)
 	}
 
 	// Initialize and run the API server if enabled.
@@ -74,7 +74,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}()
 
 	if err := config.Init(); err != nil {
-		return errors.Wrap(err, "apply system configuration")
+		return fmt.Errorf("apply system configuration: %w", err)
 	}
 
 	// Wait for program to be interrupted.

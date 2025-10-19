@@ -1,6 +1,8 @@
 package bpf
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -11,7 +13,6 @@ import (
 
 	"github.com/jsimonetti/rtnetlink/rtnl"
 	"github.com/mdlayher/netlink"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
 	"github.com/google/nftables"
@@ -32,8 +33,7 @@ const (
 )
 
 var (
-	acctProbe      *Probe
-	errChanTimeout = errors.New("timeout")
+	acctProbe *Probe
 )
 
 func TestMain(m *testing.M) {
@@ -106,8 +106,8 @@ func TestProbeFirstPacket(t *testing.T) {
 	// Send another ping, and expect it to not be logged.
 	// Further attempt(s) to read from the channel should time out.
 	mc.Ping(1)
-	ev, err = readTimeout(out, 5)
-	assert.EqualError(t, err, "timeout", ev.String())
+	_, err = readTimeout(out, 5)
+	assert.ErrorIs(t, err, errChanTimeout)
 
 	require.NoError(t, acctProbe.RemoveConsumer(ac))
 }
@@ -137,9 +137,9 @@ func TestProbeCurve(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, ev.PacketsOrig+ev.PacketsRet, ev.String())
 	// and the response to be dropped.
-	ev, err = readTimeout(out, 1)
+	_, err = readTimeout(out, 1)
 	// This also means events are drained.
-	assert.EqualError(t, err, "timeout", ev.String())
+	assert.ErrorIs(t, err, errChanTimeout)
 
 	// Wait out the first cooldown period (10ms).
 	time.Sleep(10 * time.Millisecond)
@@ -168,9 +168,9 @@ func TestProbeCurve(t *testing.T) {
 	// and expect it to be the 5th packet in this flow.
 	assert.EqualValues(t, 5, ev.PacketsOrig+ev.PacketsRet, ev.String())
 	// Expect the response to be dropped again.
-	ev, err = readTimeout(out, 1)
+	_, err = readTimeout(out, 1)
 	// This also means events are drained.
-	assert.EqualError(t, err, "timeout", ev.String())
+	assert.ErrorIs(t, err, errChanTimeout)
 
 	// Checkpoint: 52ms
 	// Wait for a duration equal to the _first_ interval on the curve,
@@ -180,9 +180,9 @@ func TestProbeCurve(t *testing.T) {
 
 	mc.Ping(1)
 	// Expect the response to be dropped again.
-	ev, err = readTimeout(out, 1)
+	_, err = readTimeout(out, 1)
 	// This also means events are drained.
-	assert.EqualError(t, err, "timeout", ev.String())
+	assert.ErrorIs(t, err, errChanTimeout)
 
 	// Checkpoint: 63ms
 	// Wait for the remaining 14ms of the cooldown of the 5th packet.
@@ -210,9 +210,9 @@ func TestProbeCurve(t *testing.T) {
 
 	mc.Ping(1)
 	// Expect the response to be dropped again.
-	ev, err = readTimeout(out, 1)
+	_, err = readTimeout(out, 1)
 	// This also means events are drained.
-	assert.EqualError(t, err, "timeout", ev.String())
+	assert.ErrorIs(t, err, errChanTimeout)
 
 	// Checkpoint: 128ms
 	// Wait out the full cooldown period of the 11th packet.
@@ -320,6 +320,8 @@ func filterWorker(in <-chan Event, out chan<- Event, f func(Event) bool) {
 	}
 }
 
+var errChanTimeout = errors.New("timeout reading from channel")
+
 // readTimeout attempts a read from an Event channel, timing out
 // when a message wasn't read after ms milliseconds.
 func readTimeout(c <-chan Event, ms uint) (Event, error) {
@@ -362,22 +364,22 @@ func prepareNetNS(port uint16) (*udpecho.MockUDPClient, uint64, func(), error) {
 	// Allocate new network namespace.
 	newns, err := netns.New()
 	if err != nil {
-		return nil, 0, nil, errors.Wrap(err, "creating network namespace")
+		return nil, 0, nil, fmt.Errorf("creating network namespace: %w", err)
 	}
 
 	// Set up network interfaces inside the new netns.
 	if err := setupInterface(newns); err != nil {
-		return nil, 0, nil, errors.Wrap(err, "setting up interfaces")
+		return nil, 0, nil, fmt.Errorf("setting up interfaces: %w", err)
 	}
 
 	// Set up nftables rules inside network namespace.
 	if err := setupNFTables(port, newns); err != nil {
-		return nil, 0, nil, errors.Wrap(err, "setting up nftables")
+		return nil, 0, nil, fmt.Errorf("setting up nftables: %w", err)
 	}
 
 	// Set the required sysctl's for the probe to gather accounting data.
 	if err := Sysctls(false); err != nil {
-		return nil, 0, nil, errors.Wrap(err, "applying sysctl")
+		return nil, 0, nil, fmt.Errorf("applying sysctl: %w", err)
 	}
 
 	// Create UDP listener inside network namespace.
@@ -549,7 +551,6 @@ func setupNFTables(port uint16, ns netns.NsHandle) error {
 }
 
 func setupInterface(ns netns.NsHandle) error {
-
 	// Dial a connection to the rtnetlink socket. Specify the netns
 	// since netlink spawns a worker on a fresh OS thread. This thread
 	// needs to be moved into the netns.
@@ -563,17 +564,17 @@ func setupInterface(ns netns.NsHandle) error {
 	// that is already locked to a new netns.
 	link, err := net.InterfaceByName("lo")
 	if err != nil {
-		return errors.Wrap(err, "getting 'lo' ifindex")
+		return fmt.Errorf("getting lo ifindex: %w", err)
 	}
 
 	// Bring up the link.
 	if err := conn.LinkUp(link); err != nil {
-		return errors.Wrap(err, "setting up link 'lo'")
+		return fmt.Errorf("setting up link lo: %w", err)
 	}
 
 	// Add the address to the link.
 	if err := conn.AddrAdd(link, rtnl.MustParseAddr(bindAddr+"/32")); err != nil {
-		return errors.Wrap(err, "adding address to 'lo'")
+		return fmt.Errorf("adding address to lo: %w", err)
 	}
 
 	return err

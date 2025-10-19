@@ -1,9 +1,7 @@
 package pipeline
 
 import (
-	"strings"
-
-	"github.com/pkg/errors"
+	"fmt"
 
 	log "github.com/sirupsen/logrus"
 
@@ -36,7 +34,7 @@ func (p *Pipeline) initProbe(pc *config.ProbeConfig) error {
 	// Create a new accounting probe.
 	ap, err := bpf.NewProbe(cfg)
 	if err != nil {
-		return errors.Wrap(err, "initializing BPF probe")
+		return fmt.Errorf("initializing BPF probe: %w", err)
 	}
 
 	log.Infof("Loaded BPF programs")
@@ -45,21 +43,21 @@ func (p *Pipeline) initProbe(pc *config.ProbeConfig) error {
 	// From the perspective of the pipeline, these are sources.
 	au := bpf.NewConsumer("PipelineAcctUpdate", make(chan bpf.Event, 1024), bpf.ConsumerUpdate)
 	if err := ap.RegisterConsumer(au); err != nil {
-		return errors.Wrap(err, "registering update consumer to probe")
+		return fmt.Errorf("registering update consumer to probe: %w", err)
 	}
 	// Store references to the source and its stats.
 	p.acctUpdateSource = au
 	p.stats.UpdateSourceStats = au.Stats()
-	log.Debug("Registered Probe consumer " + au.Name())
+	log.Debugf("Registered Probe consumer %s", au.Name())
 
 	ad := bpf.NewConsumer("PipelineAcctDestroy", make(chan bpf.Event, 1024), bpf.ConsumerDestroy)
 	if err := ap.RegisterConsumer(ad); err != nil {
-		return errors.Wrap(err, "registering destroy consumer to probe")
+		return fmt.Errorf("registering destroy consumer to probe: %w", err)
 	}
 	// Store references to the source and its stats.
 	p.acctDestroySource = ad
 	p.stats.DestroySourceStats = ad.Stats()
-	log.Debug("Registered Probe consumer " + ad.Name())
+	log.Debugf("Registered Probe consumer %s", ad.Name())
 
 	// Save the Probe reference to the pipeline.
 	p.acctProbe = ap
@@ -93,10 +91,7 @@ func (p *Pipeline) startAcct() error {
 
 	// Start the Probe.
 	if err := p.acctProbe.Start(); err != nil {
-		if strings.Contains(err.Error(), "kprobe_events") {
-			log.Warn("Either another conntracct instance is running, or the program was sent a SIGKILL. Try running 'echo | sudo tee /sys/kernel/debug/tracing/kprobe_events'. (will detach all kprobes)")
-		}
-		return errors.Wrap(err, "starting probe")
+		return fmt.Errorf("starting probe: %w", err)
 	}
 
 	log.Info("Started accounting probe and workers")
