@@ -93,25 +93,18 @@ func (s *ElasticSink) Init(sc config.SinkConfig) error {
 	return nil
 }
 
-// PushUpdate pushes an update event into the buffer of the ElasticSearch accounting sink.
-func (s *ElasticSink) PushUpdate(e bpf.Event) {
+// Push pushes an event into the buffer of the ElasticSearch accounting sink.
+func (s *ElasticSink) Push(e bpf.Event) {
 
-	// Wrap the BPF event in a structure to be inserted into the database.
-	ee := event{
-		State: "established",
-		Event: &e,
+	// Destroy events mark the end of a flow.
+	state := "established"
+	if e.Type == bpf.Destroy {
+		state = "finished"
 	}
 
-	s.transformEvent(&ee)
-	s.addBatchEvent(&ee)
-}
-
-// PushDestroy pushes a destroy event into the buffer of the ElasticSearch accounting sink.
-func (s *ElasticSink) PushDestroy(e bpf.Event) {
-
 	// Wrap the BPF event in a structure to be inserted into the database.
 	ee := event{
-		State: "finished",
+		State: state,
 		Event: &e,
 	}
 
@@ -132,6 +125,12 @@ func (s *ElasticSink) Name() string {
 // Stats returns the ElasticSearch accounting sink's statistics structure.
 func (s *ElasticSink) Stats() types.SinkStats {
 	return s.stats.Get()
+}
+
+// WantNew returns true if the elastic sink is configured to accept new flow events.
+// TODO(timo): Add this to SinkConfig.
+func (s *ElasticSink) WantNew() bool {
+	return true
 }
 
 // WantUpdate returns true if the elastic sink is configured to accept update events.

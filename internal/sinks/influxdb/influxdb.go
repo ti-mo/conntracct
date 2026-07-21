@@ -128,16 +128,14 @@ func (s *InfluxSink) Init(sc config.SinkConfig) error {
 	return nil
 }
 
-// PushUpdate pushes an update event into the buffer of the InfluxDB accounting sink.
-func (s *InfluxSink) PushUpdate(e bpf.Event) {
+// Push pushes an event into the buffer of the InfluxDB accounting sink.
+func (s *InfluxSink) Push(e bpf.Event) {
 	s.push(e)
-	s.stats.IncrUpdateEventsPushed()
-}
-
-// PushDestroy pushes a destroy event into the buffer of the InfluxDB accounting sink.
-func (s *InfluxSink) PushDestroy(e bpf.Event) {
-	s.push(e)
-	s.stats.IncrDestroyEventsPushed()
+	if e.Type == bpf.Destroy {
+		s.stats.IncrDestroyEventsPushed()
+	} else {
+		s.stats.IncrUpdateEventsPushed()
+	}
 }
 
 func (s *InfluxSink) push(e bpf.Event) {
@@ -194,6 +192,11 @@ func (s *InfluxSink) Name() string {
 // IsInit returns true if the InfluxDB accounting sink was successfully initialized.
 func (s *InfluxSink) IsInit() bool {
 	return s.init
+}
+
+// WantNew always returns true.
+func (s *InfluxSink) WantNew() bool {
+	return true
 }
 
 // WantUpdate always returns true.

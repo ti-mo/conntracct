@@ -24,8 +24,7 @@ type StdOut struct {
 
 	// Buffered event channels. BatchLength configuration parameter
 	// is used as the buffer sizes of these channels.
-	updates  chan bpf.Event
-	destroys chan bpf.Event
+	events chan bpf.Event
 
 	// Stdout/err writer.
 	writer *bufio.Writer
@@ -58,8 +57,7 @@ func (s *StdOut) Init(sc config.SinkConfig) error {
 		return errInvalidSinkType
 	}
 
-	s.updates = make(chan bpf.Event, sc.BatchSize)
-	s.destroys = make(chan bpf.Event, sc.BatchSize)
+	s.events = make(chan bpf.Event, sc.BatchSize)
 	s.config = sc
 
 	go s.outWorker()
@@ -70,25 +68,14 @@ func (s *StdOut) Init(sc config.SinkConfig) error {
 	return nil
 }
 
-// PushUpdate pushes an update event into the buffer of the StdOut accounting sink.
-func (s *StdOut) PushUpdate(e bpf.Event) {
+// PushUpdate pushes an event into the buffer of the StdOut accounting sink.
+func (s *StdOut) Push(e bpf.Event) {
 	// Non-blocking send on event channel.
 	select {
-	case s.updates <- e:
+	case s.events <- e:
 		s.stats.IncrUpdateEventsPushed()
 	default:
 		s.stats.IncrUpdateEventsDropped()
-	}
-}
-
-// PushDestroy pushes a destroy event into the buffer of the StdOut accounting sink.
-func (s *StdOut) PushDestroy(e bpf.Event) {
-	// Non-blocking send on event channel.
-	select {
-	case s.destroys <- e:
-		s.stats.IncrDestroyEventsPushed()
-	default:
-		s.stats.IncrDestroyEventsDropped()
 	}
 }
 
@@ -100,6 +87,11 @@ func (s *StdOut) Name() string {
 // IsInit checks if the StdOut was successfully initialized.
 func (s *StdOut) IsInit() bool {
 	return s.init
+}
+
+// WantNew always returns true.
+func (s *StdOut) WantNew() bool {
+	return true
 }
 
 // WantUpdate always returns true.

@@ -31,16 +31,15 @@ func (d *Dummy) Init(sc config.SinkConfig) error {
 	return nil
 }
 
-// PushUpdate sends an update event into the abyss.
-func (d *Dummy) PushUpdate(e bpf.Event) {
+// Push sends an event into the abyss.
+func (d *Dummy) Push(e bpf.Event) {
+	if e.Type == bpf.Destroy {
+		d.stats.IncrDestroyEventsPushed()
+		d.stats.IncrDestroyEventsDropped()
+		return
+	}
 	d.stats.IncrUpdateEventsPushed()
 	d.stats.IncrUpdateEventsDropped()
-}
-
-// PushDestroy sends a destroy event into the abyss.
-func (d *Dummy) PushDestroy(e bpf.Event) {
-	d.stats.IncrDestroyEventsPushed()
-	d.stats.IncrDestroyEventsDropped()
 }
 
 // Name gets the name of the Dummy.
@@ -51,6 +50,11 @@ func (d *Dummy) Name() string {
 // IsInit checks if the Dummy was successfully initialized.
 func (d *Dummy) IsInit() bool {
 	return d.init
+}
+
+// WantNew always returns true.
+func (d *Dummy) WantNew() bool {
+	return true
 }
 
 // WantUpdate always returns true.

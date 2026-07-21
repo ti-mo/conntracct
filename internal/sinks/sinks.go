@@ -13,7 +13,7 @@ import (
 	"github.com/ti-mo/conntracct/internal/sinks/types"
 )
 
-// An Sink represents a timeseries database or other store
+// A Sink represents a timeseries database or other store
 // that can accept accounting info.
 type Sink interface {
 
@@ -26,15 +26,15 @@ type Sink interface {
 	// Get the sink's name.
 	Name() string
 
+	// Return true if the sink wants to receive new flow events.
+	WantNew() bool
 	// Returns true if the sink wants to receive update events.
 	WantUpdate() bool
 	// Returns true if the sink wants to receive destroy events.
 	WantDestroy() bool
 
-	// Push an update event to the sink driver. Implementation must be thread-safe.
-	PushUpdate(bpf.Event)
-	// Push a destroy event to the sink driver. Implementation must be thread-safe.
-	PushDestroy(bpf.Event)
+	// Push an event to the sink driver. Implementation must be thread-safe.
+	Push(bpf.Event)
 
 	// Get a snapshot copy of the sink's performance statistics.
 	Stats() types.SinkStats
