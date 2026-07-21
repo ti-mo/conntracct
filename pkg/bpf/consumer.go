@@ -1,38 +1,18 @@
 package bpf
 
-// ConsumerMode defines whether the consumer
-// receives updates, destroys, or both.
-type ConsumerMode uint8
-
-// Kind of events the consumer subscribes to.
-const (
-	ConsumerUpdate  ConsumerMode = 1
-	ConsumerDestroy ConsumerMode = 2
-	ConsumerAll     ConsumerMode = (ConsumerUpdate | ConsumerDestroy)
-)
-
 // A Consumer of accounting events.
 type Consumer struct {
 	name   string
 	events chan Event
 
-	// Kinds of events the consumer wants to receive. (update, destroy, all)
-	mode ConsumerMode
-
 	stats *ConsumerStats
 }
 
 // NewConsumer returns a new Consumer.
-func NewConsumer(name string, events chan Event, mode ConsumerMode) *Consumer {
-
-	if mode == 0 {
-		mode = ConsumerAll
-	}
-
+func NewConsumer(name string, events chan Event) *Consumer {
 	ac := Consumer{
 		name:   name,
 		events: events,
-		mode:   mode,
 		stats:  &ConsumerStats{},
 	}
 
@@ -56,19 +36,8 @@ func (ac *Consumer) Stats() *ConsumerStats {
 	return ac.stats
 }
 
-// WantUpdate returns whether or not this consumer wants to receive update events.
-func (ac *Consumer) WantUpdate() bool {
-	return (ac.mode & ConsumerUpdate) > 0
-}
-
-// WantDestroy returns whether or not this consumer wants to receive destroy events.
-func (ac *Consumer) WantDestroy() bool {
-	return (ac.mode & ConsumerDestroy) > 0
-}
-
 // RegisterConsumer registers an Consumer in an Probe.
 func (ap *Probe) RegisterConsumer(ac *Consumer) error {
-
 	if ac == nil {
 		return errConsumerNil
 	}
@@ -90,7 +59,6 @@ func (ap *Probe) RegisterConsumer(ac *Consumer) error {
 
 // RemoveConsumer removes an Consumer from the Probe's consumer list.
 func (ap *Probe) RemoveConsumer(ac *Consumer) error {
-
 	if ac == nil {
 		return errConsumerNil
 	}
@@ -117,20 +85,4 @@ func (ap *Probe) RemoveConsumer(ac *Consumer) error {
 	}
 
 	return errNoConsumer
-}
-
-// GetConsumer looks up and returns an Consumer registered in an Probe
-// based on its name. Returns nil if consumer does not exist in probe.
-func (ap *Probe) GetConsumer(name string) *Consumer {
-
-	ap.consumerMu.RLock()
-	defer ap.consumerMu.RUnlock()
-
-	for _, c := range ap.consumers {
-		if c.name == name {
-			return c
-		}
-	}
-
-	return nil
 }

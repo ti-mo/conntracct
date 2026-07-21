@@ -185,7 +185,7 @@ func (ap *Probe) updateWorker() {
 		ae.Type = Update
 
 		// Fan out update event to all registered consumers.
-		ap.fanoutEvent(ae, true)
+		ap.fanoutEvent(ae)
 	}
 }
 
@@ -219,32 +219,26 @@ func (ap *Probe) destroyWorker() {
 		ae.Type = Destroy
 
 		// Fan out destroy event to all registered consumers.
-		ap.fanoutEvent(ae, false)
+		ap.fanoutEvent(ae)
 	}
 }
 
 // fanoutEvent sends the given Event to all registered consumers.
-// The update flag specifies whether the event is an update (true) or destroy
-// (false) event.
-func (ap *Probe) fanoutEvent(ae Event, update bool) {
+func (ap *Probe) fanoutEvent(ae Event) {
 	// Take a read lock on the consumers so we don't send to closed or already
 	// unregistered consumer channels.
 	ap.consumerMu.RLock()
 
 	for _, c := range ap.consumers {
-		// Require the update/destroy condition of the event to match
-		// the requested event type of the consumer.
-		if (update && c.WantUpdate()) || (!update && c.WantDestroy()) {
-			// Non-blocking send to the consumer's event channel.
-			select {
-			case c.events <- ae:
-				c.stats.setQueueLength(len(c.events))
-				c.stats.incrEventsReceived()
-			default:
-				// If the channel can't be written to immediately,
-				// increment the consumer's lost counter.
-				c.stats.incrEventsLost()
-			}
+		// Non-blocking send to the consumer's event channel.
+		select {
+		case c.events <- ae:
+			c.stats.setQueueLength(len(c.events))
+			c.stats.incrEventsReceived()
+		default:
+			// If the channel can't be written to immediately,
+			// increment the consumer's lost counter.
+			c.stats.incrEventsLost()
 		}
 	}
 

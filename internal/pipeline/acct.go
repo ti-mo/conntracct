@@ -39,25 +39,16 @@ func (p *Pipeline) initProbe(pc *config.ProbeConfig) error {
 
 	log.Infof("Loaded BPF programs")
 
-	// Register accounting update/destroy event consumers.
-	// From the perspective of the pipeline, these are sources.
-	au := bpf.NewConsumer("PipelineAcctUpdate", make(chan bpf.Event, 1024), bpf.ConsumerUpdate)
-	if err := ap.RegisterConsumer(au); err != nil {
-		return fmt.Errorf("registering update consumer to probe: %w", err)
+	// Register accounting event consumers.
+	// From the perspective of the pipeline, these are event sources.
+	ac := bpf.NewConsumer("PipelineAcct", make(chan bpf.Event, 1024))
+	if err := ap.RegisterConsumer(ac); err != nil {
+		return fmt.Errorf("registering acct consumer to probe: %w", err)
 	}
 	// Store references to the source and its stats.
-	p.acctUpdateSource = au
-	p.stats.UpdateSourceStats = au.Stats()
-	log.Debugf("Registered Probe consumer %s", au.Name())
-
-	ad := bpf.NewConsumer("PipelineAcctDestroy", make(chan bpf.Event, 1024), bpf.ConsumerDestroy)
-	if err := ap.RegisterConsumer(ad); err != nil {
-		return fmt.Errorf("registering destroy consumer to probe: %w", err)
-	}
-	// Store references to the source and its stats.
-	p.acctDestroySource = ad
-	p.stats.DestroySourceStats = ad.Stats()
-	log.Debugf("Registered Probe consumer %s", ad.Name())
+	p.acctSource = ac
+	p.stats.AcctSourceStats = ac.Stats()
+	log.Debugf("Registered Probe consumer %s", ac.Name())
 
 	// Save the Probe reference to the pipeline.
 	p.acctProbe = ap
@@ -84,10 +75,8 @@ func (p *Pipeline) Start() error {
 // startAcct starts the Probe and starts goroutines reading Events from
 // update and destroy sources.
 func (p *Pipeline) startAcct() error {
-
 	// Start the conntracct event consumer.
 	go p.acctUpdateWorker()
-	go p.acctDestroyWorker()
 
 	// Start the Probe.
 	if err := p.acctProbe.Start(); err != nil {
@@ -99,55 +88,38 @@ func (p *Pipeline) startAcct() error {
 	return nil
 }
 
-// acctUpdateWorker reads from the pipeline's update event channel
-// and delivers events to all registered sinks listening for update events.
-// This code closely resembles acctDestroyWorker due to this being in the hot
-// path, avoiding as much branching and unnecessary work as possible.
+// acctUpdateWorker reads from the pipeline's event channel
+// and delivers events to all registered sinks listening for events.
 func (p *Pipeline) acctUpdateWorker() {
-
-	c := p.acctUpdateSource.Events()
-
+	c := p.acctSource.Events()
 	for {
-		ae, ok := <-c
+		e, ok := <-c
 		if !ok {
 			log.Debug("Pipeline's update event channel closed, stopping worker.")
 			break
 		}
 
 		// Record pipeline statistics.
-		p.stats.IncrEventsUpdate()
+		switch e.Type {
+		case bpf.New:
+			p.stats.IncrEventsNew()
+		case bpf.Update:
+			p.stats.IncrEventsUpdate()
+		case bpf.Destroy:
+			p.stats.IncrEventsDestroy()
+		}
 
 		// Fan out to all registered accounting sinks.
 		p.acctSinkMu.RLock()
 		for _, s := range p.acctSinks {
-			if s.WantUpdate() {
-				s.Push(ae)
+			if e.Type == bpf.New && s.WantNew() {
+				s.Push(e)
 			}
-		}
-		p.acctSinkMu.RUnlock()
-	}
-}
-
-// acctDestroyWorker is a copy of acctUpdateWorker, but for destroy events.
-func (p *Pipeline) acctDestroyWorker() {
-
-	c := p.acctDestroySource.Events()
-
-	for {
-		ae, ok := <-c
-		if !ok {
-			log.Debug("Pipeline's destroy event channel closed, stopping worker.")
-			break
-		}
-
-		// Record pipeline statistics.
-		p.stats.IncrEventsDestroy()
-
-		// Fan out to all registered accounting sinks.
-		p.acctSinkMu.RLock()
-		for _, s := range p.acctSinks {
-			if s.WantDestroy() {
-				s.Push(ae)
+			if e.Type == bpf.Update && s.WantUpdate() {
+				s.Push(e)
+			}
+			if e.Type == bpf.Destroy && s.WantDestroy() {
+				s.Push(e)
 			}
 		}
 		p.acctSinkMu.RUnlock()

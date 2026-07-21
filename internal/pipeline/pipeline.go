@@ -12,10 +12,9 @@ import (
 type Pipeline struct {
 	start sync.Once
 
-	init              sync.Once
-	acctProbe         *bpf.Probe
-	acctUpdateSource  *bpf.Consumer
-	acctDestroySource *bpf.Consumer
+	init       sync.Once
+	acctProbe  *bpf.Probe
+	acctSource *bpf.Consumer
 
 	acctSinkMu sync.RWMutex
 	acctSinks  []sinks.Sink
