@@ -4,68 +4,73 @@
 
 #include "acct.h"
 
-// perf map to send update events to userspace.
 struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __type(value, struct event);
-} perf_acct_update SEC(".maps");
-
-// perf map to send destroy events to userspace.
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __type(value, struct event);
-} perf_acct_end SEC(".maps");
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 1024 * 1024);
+  __type(value, struct event);
+} ringbuf SEC(".maps");
 
 // flow_sample sends an event for ct with the given type.
-static __always_inline void flow_sample(u64 *ctx, struct nf_conn *ct, enum event_type type) {
+static __always_inline void flow_sample(struct nf_conn *ct, enum event_type type) {
   if (!ct_valid(ct))
     return;
 
-  // Allocate event struct after all checks have succeeded.
-  struct event data = {
-    .ts = bpf_ktime_get_ns(),
-    .cptr = (u64)ct,
-    .netns = ct->ct_net.net->ns.inum,
-    .connmark = ct->mark,
-  };
-
-  // Pull counters onto the BPF stack first, so that we can make event rate
-  // limiting decisions based on packet counters without doing unnecessary work.
-  // Return if extracting counters fails, which is possible on untracked flows.
-  if (!extract_extensions(&data, ct))
-    return;
+  u64 ts = bpf_ktime_get_ns();
+  struct nf_conn_acct *acct = ct_get_acct(ct);
 
   if (type != CT_DESTROY) {
+    struct packets packets;
+    if (!packets_read_acct(&packets, acct))
+      return;
+
     // Sample accounting events from the kernel using a curve-based rate limiter.
     // On every event that is sent, the flow that caused it is given a cooldown
     // period during which it cannot send more events. The length of this period
     // depends on the age of the flow. The older the flow, the longer the period,
     // and the lower the update frequency. The age thresholds and update intervals
     // can be configured through the 'config_ratecurve' map.
-    u64 pkts_total = (data.packets_orig + data.packets_ret);
-    if (pkts_total > 1 && !flow_cooldown_expired(ct, data.ts))
+    if (packets.total > 1 && !flow_cooldown_expired(ct, ts))
       return;
 
     // Store a reference timestamp ('origin') to allow future event cycles to
     // determine the age of the flow. This is write-once and will only store
     // a value on the first call of each flow.
-    flow_initialize_origin(ct, data.ts, pkts_total);
+    flow_initialize_origin(ct, ts, packets.total);
 
     // Set the cooldown expiration to the current timestamp plus a cooldown period
     // based on the age of the flow. flow_set_cooldown returns negative if
     // the event should be dropped due to the flow being too young or
     // because of an internal curve lookup error.
-    if (flow_set_cooldown(ct, data.ts) < 0)
+    if (flow_set_cooldown(ct, ts) < 0)
       return;
   }
 
-  extract_tuple(&data, ct);
+  // Allocate event struct after all checks have succeeded.
+  struct event *e = bpf_ringbuf_reserve(&ringbuf, sizeof(*e), 0);
+  if (!e)
+    return;
 
-  if (type != CT_DESTROY)
-    bpf_perf_event_output(ctx, &perf_acct_update, BPF_F_CURRENT_CPU, &data, sizeof(data));
-  else
-    bpf_perf_event_output(ctx, &perf_acct_end, BPF_F_CURRENT_CPU, &data, sizeof(data));
+  *e = (struct event){
+    .type = type,
+    .ts = ts,
+    .netns = ct->ct_net.net->ns.inum,
+    .connmark = ct->mark,
+  };
 
+  if (!data_read_acct(e, ct_get_acct(ct)))
+    goto release;
+
+  if (!data_read_tstamp(e, ct_get_tstamp(ct)))
+    goto release;
+
+  extract_tuple(e, ct);
+
+  bpf_ringbuf_submit(e, 0);
+
+  return;
+
+release:
+  bpf_ringbuf_discard(e, 0);
   return;
 }
 
@@ -78,7 +83,7 @@ int BPF_PROG(ct_new, struct sk_buff *skb) {
   if (ct == NULL)
     return 0;
 
-  flow_sample(ctx, ct, CT_NEW);
+  flow_sample(ct, CT_NEW);
 
   return 0;
 }
@@ -86,7 +91,7 @@ int BPF_PROG(ct_new, struct sk_buff *skb) {
 // __nf_ct_refresh_acct bumps acct counters.
 SEC("fexit/__nf_ct_refresh_acct")
 int BPF_PROG(ct_update, struct nf_conn *ct) {
-  flow_sample(ctx, ct, CT_UPDATE);
+  flow_sample(ct, CT_UPDATE);
 
   return 0;
 }
@@ -107,7 +112,7 @@ int BPF_PROG(ct_update, struct nf_conn *ct) {
 // in ct_valid.
 SEC("fentry/nf_conntrack_free")
 int BPF_PROG(ct_destroy, struct nf_conn *ct) {
-  flow_sample(ctx, ct, CT_DESTROY);
+  flow_sample(ct, CT_DESTROY);
 
   flow_cleanup(ct);
 

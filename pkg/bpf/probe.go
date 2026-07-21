@@ -8,16 +8,15 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/ringbuf"
 )
 
 // Probe is an instance of a BPF probe running in the kernel.
 type Probe struct {
 	// ebpf-go resources.
-	objs          *acctObjects
-	updateReader  *perf.Reader
-	destroyReader *perf.Reader
-	links         []link.Link
+	objs    *acctObjects
+	ringbuf *ringbuf.Reader
+	links   []link.Link
 
 	// List of event consumers of the probe.
 	consumerMu sync.RWMutex
@@ -78,21 +77,14 @@ func (ap *Probe) Start() error {
 	ap.lost = make(chan uint64)
 
 	// Set up Readers for reading events from the perf ring buffers.
-	r, err := perf.NewReader(ap.objs.PerfAcctUpdate, 4096)
+	r, err := ringbuf.NewReader(ap.objs.Ringbuf)
 	if err != nil {
-		return fmt.Errorf("create acct update perf reader: %w", err)
+		return fmt.Errorf("create acct ringbuf reader: %w", err)
 	}
-	ap.updateReader = r
-
-	r, err = perf.NewReader(ap.objs.PerfAcctEnd, 4096)
-	if err != nil {
-		return fmt.Errorf("create acct destroy perf reader: %w", err)
-	}
-	ap.destroyReader = r
+	ap.ringbuf = r
 
 	// Start event decoder/fanout workers.
 	go ap.updateWorker()
-	go ap.destroyWorker()
 
 	l, err := link.AttachTracing(link.TracingOptions{Program: ap.objs.CtNew})
 	if err != nil {
@@ -127,11 +119,7 @@ func (ap *Probe) Stop() error {
 		return errProbeNotStarted
 	}
 
-	if err := ap.updateReader.Close(); err != nil {
-		return err
-	}
-
-	if err := ap.destroyReader.Close(); err != nil {
+	if err := ap.ringbuf.Close(); err != nil {
 		return err
 	}
 
@@ -153,12 +141,12 @@ func (ap *Probe) Stats() ProbeStats {
 	return ap.stats.Get()
 }
 
-// updateWorker reads binady flow update events from the Probe's ring buffer,
+// updateWorker reads binary flow update events from the Probe's ring buffer,
 // unmarshals the events into Event structures and sends them on all registered
 // consumers' event channels.
 func (ap *Probe) updateWorker() {
 	for {
-		rec, err := ap.updateReader.Read()
+		rec, err := ap.ringbuf.Read()
 		if err != nil {
 			// Reader closed, gracefully exit the read loop.
 			if errors.Is(err, os.ErrClosed) {
@@ -167,64 +155,22 @@ func (ap *Probe) updateWorker() {
 			panic(fmt.Sprint("unexpected error reading from updateReader:", err))
 		}
 
-		// Log the amount of lost samples and skip processing the sample.
-		if rec.LostSamples > 0 {
-			ap.stats.incrPerfEventsUpdateLost(rec.LostSamples)
-			continue
-		}
-
-		ap.stats.incrPerfEventsUpdate()
+		ap.stats.incrRingbufEventsTotal()
 
 		var ae Event
 		if err := ae.unmarshalBinary(rec.RawSample); err != nil {
 			panic(err)
 		}
-
-		// The update perf map carries both new and update events, which
-		// cannot be told apart in userspace. Tag them all as updates.
-		ae.Type = Update
 
 		// Fan out update event to all registered consumers.
 		ap.fanoutEvent(ae)
 	}
 }
 
-// destroyWorker reads binary destroy events from the Probe's ring buffer,
-// unmarshals the events into Event structures and sends them on all registered
-// consumers' event channels .
-func (ap *Probe) destroyWorker() {
-	for {
-		rec, err := ap.destroyReader.Read()
-		if err != nil {
-			// Reader closed, gracefully exit the read loop.
-			if errors.Is(err, os.ErrClosed) {
-				return
-			}
-			panic(fmt.Sprint("unexpected error reading from destroyReader:", err))
-		}
-
-		// Log the amount of lost samples and skip processing the sample.
-		if rec.LostSamples > 0 {
-			ap.stats.incrPerfEventsDestroyLost(rec.LostSamples)
-			continue
-		}
-
-		ap.stats.incrPerfEventsDestroy()
-
-		var ae Event
-		if err := ae.unmarshalBinary(rec.RawSample); err != nil {
-			panic(err)
-		}
-
-		ae.Type = Destroy
-
-		// Fan out destroy event to all registered consumers.
-		ap.fanoutEvent(ae)
-	}
-}
-
 // fanoutEvent sends the given Event to all registered consumers.
-func (ap *Probe) fanoutEvent(ae Event) {
+// The update flag specifies whether the event is an update (true) or destroy
+// (false) event.
+func (ap *Probe) fanoutEvent(e Event) {
 	// Take a read lock on the consumers so we don't send to closed or already
 	// unregistered consumer channels.
 	ap.consumerMu.RLock()
@@ -232,7 +178,7 @@ func (ap *Probe) fanoutEvent(ae Event) {
 	for _, c := range ap.consumers {
 		// Non-blocking send to the consumer's event channel.
 		select {
-		case c.events <- ae:
+		case c.events <- e:
 			c.stats.setQueueLength(len(c.events))
 			c.stats.incrEventsReceived()
 		default:

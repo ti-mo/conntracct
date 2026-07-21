@@ -127,69 +127,7 @@ static __u64 (* const bpf_ktime_get_ns)(void) = (void *) 5;
 static long (* const bpf_trace_printk)(const char *fmt, __u32 fmt_size, ...) = (void *) 6;
 
 /*
- * bpf_get_current_pid_tgid
- *
- * 	Get the current pid and tgid.
- *
- * Returns
- * 	A 64-bit integer containing the current tgid and pid, and
- * 	created as such:
- * 	*current_task*\ **->tgid << 32 \|**
- * 	*current_task*\ **->pid**.
- */
-static __u64 (* const bpf_get_current_pid_tgid)(void) = (void *) 14;
-
-/*
- * bpf_perf_event_output
- *
- * 	Write raw *data* blob into a special BPF perf event held by
- * 	*map* of type **BPF_MAP_TYPE_PERF_EVENT_ARRAY**. This perf
- * 	event must have the following attributes: **PERF_SAMPLE_RAW**
- * 	as **sample_type**, **PERF_TYPE_SOFTWARE** as **type**, and
- * 	**PERF_COUNT_SW_BPF_OUTPUT** as **config**.
- *
- * 	The *flags* are used to indicate the index in *map* for which
- * 	the value must be put, masked with **BPF_F_INDEX_MASK**.
- * 	Alternatively, *flags* can be set to **BPF_F_CURRENT_CPU**
- * 	to indicate that the index of the current CPU core should be
- * 	used.
- *
- * 	The value to write, of *size*, is passed through eBPF stack and
- * 	pointed by *data*.
- *
- * 	The context of the program *ctx* needs also be passed to the
- * 	helper.
- *
- * 	On user space, a program willing to read the values needs to
- * 	call **perf_event_open**\ () on the perf event (either for
- * 	one or for all CPUs) and to store the file descriptor into the
- * 	*map*. This must be done before the eBPF program can send data
- * 	into it. An example is available in file
- * 	*samples/bpf/trace_output_user.c* in the Linux kernel source
- * 	tree (the eBPF program counterpart is in
- * 	*samples/bpf/trace_output.bpf.c*).
- *
- * 	**bpf_perf_event_output**\ () achieves better performance
- * 	than **bpf_trace_printk**\ () for sharing data with user
- * 	space, and is much better suitable for streaming data from eBPF
- * 	programs.
- *
- * 	Note that this helper is not restricted to tracing use cases
- * 	and can be used with programs attached to TC or XDP as well,
- * 	where it allows for passing data to user space listeners. Data
- * 	can be:
- *
- * 	* Only custom structs,
- * 	* Only the packet payload, or
- * 	* A combination of both.
- *
- * Returns
- * 	0 on success, or a negative error in case of failure.
- */
-static long (* const bpf_perf_event_output)(void *ctx, void *map, __u64 flags, void *data, __u64 size) = (void *) 25;
-
-/*
- * bpf_probe_read_kernel
+* bpf_probe_read_kernel
  *
  * 	Safely attempt to read *size* bytes from kernel space address
  * 	*unsafe_ptr* and store the data in *dst*.
@@ -198,3 +136,9 @@ static long (* const bpf_perf_event_output)(void *ctx, void *map, __u64 flags, v
  * 	0 on success, or a negative error in case of failure.
  */
 static long (* const bpf_probe_read_kernel)(void *dst, __u32 size, const void *unsafe_ptr) = (void *) 113;
+
+static void *(* const bpf_ringbuf_reserve)(void *ringbuf, __u64 size, __u64 flags) = (void *) 131;
+
+static void (* const bpf_ringbuf_submit)(void *data, __u64 flags) = (void *) 132;
+
+static void (* const bpf_ringbuf_discard)(void *data, __u64 flags) = (void *) 133;

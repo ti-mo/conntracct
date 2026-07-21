@@ -21,16 +21,29 @@ type acctCurvePoint struct {
 
 type acctEvent struct {
 	_       structs.HostLayout
+	Type    uint32
+	_       [4]byte
 	Start   uint64
 	Ts      uint64
-	Cptr    uint64
 	Srcaddr struct {
 		_   structs.HostLayout
-		All [4]uint32
+		In6 struct {
+			_    structs.HostLayout
+			In6U struct {
+				_       structs.HostLayout
+				U6Addr8 [16]uint8
+			}
+		}
 	}
 	Dstaddr struct {
 		_   structs.HostLayout
-		All [4]uint32
+		In6 struct {
+			_    structs.HostLayout
+			In6U struct {
+				_       structs.HostLayout
+				U6Addr8 [16]uint8
+			}
+		}
 	}
 	PacketsOrig uint64
 	BytesOrig   uint64
@@ -48,16 +61,15 @@ type acctEvent struct {
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	acctMapFlowCooldown   = "flow_cooldown"
-	acctMapFlowOrigin     = "flow_origin"
-	acctMapPerfAcctEnd    = "perf_acct_end"
-	acctMapPerfAcctUpdate = "perf_acct_update"
-	acctProgCtDestroy     = "ct_destroy"
-	acctProgCtNew         = "ct_new"
-	acctProgCtUpdate      = "ct_update"
-	acctVarCurve0         = "curve0"
-	acctVarCurve1         = "curve1"
-	acctVarCurve2         = "curve2"
+	acctMapFlowCooldown = "flow_cooldown"
+	acctMapFlowOrigin   = "flow_origin"
+	acctMapRingbuf      = "ringbuf"
+	acctProgCtDestroy   = "ct_destroy"
+	acctProgCtNew       = "ct_new"
+	acctProgCtUpdate    = "ct_update"
+	acctVarCurve0       = "curve0"
+	acctVarCurve1       = "curve1"
+	acctVarCurve2       = "curve2"
 )
 
 // loadAcct returns the embedded CollectionSpec for acct.
@@ -111,10 +123,9 @@ type acctProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type acctMapSpecs struct {
-	FlowCooldown   *ebpf.MapSpec `ebpf:"flow_cooldown"`
-	FlowOrigin     *ebpf.MapSpec `ebpf:"flow_origin"`
-	PerfAcctEnd    *ebpf.MapSpec `ebpf:"perf_acct_end"`
-	PerfAcctUpdate *ebpf.MapSpec `ebpf:"perf_acct_update"`
+	FlowCooldown *ebpf.MapSpec `ebpf:"flow_cooldown"`
+	FlowOrigin   *ebpf.MapSpec `ebpf:"flow_origin"`
+	Ringbuf      *ebpf.MapSpec `ebpf:"ringbuf"`
 }
 
 // acctVariableSpecs contains global variables before they are loaded into the kernel.
@@ -146,18 +157,16 @@ func (o *acctObjects) Close() error {
 //
 // It can be passed to loadAcctObjects or ebpf.CollectionSpec.LoadAndAssign.
 type acctMaps struct {
-	FlowCooldown   *ebpf.Map `ebpf:"flow_cooldown"`
-	FlowOrigin     *ebpf.Map `ebpf:"flow_origin"`
-	PerfAcctEnd    *ebpf.Map `ebpf:"perf_acct_end"`
-	PerfAcctUpdate *ebpf.Map `ebpf:"perf_acct_update"`
+	FlowCooldown *ebpf.Map `ebpf:"flow_cooldown"`
+	FlowOrigin   *ebpf.Map `ebpf:"flow_origin"`
+	Ringbuf      *ebpf.Map `ebpf:"ringbuf"`
 }
 
 func (m *acctMaps) Close() error {
 	return _AcctClose(
 		m.FlowCooldown,
 		m.FlowOrigin,
-		m.PerfAcctEnd,
-		m.PerfAcctUpdate,
+		m.Ringbuf,
 	)
 }
 

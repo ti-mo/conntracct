@@ -1,17 +1,19 @@
 #pragma once
 
+#include "bpf_endian.h"
+
 #include "cooldown.h"
 
 enum event_type {
-    CT_NEW,
-    CT_UPDATE,
-    CT_DESTROY,
+    CT_NEW = 1 << 0,
+    CT_UPDATE = 1 << 1,
+    CT_DESTROY = 1 << 2,
 };
 
 struct event {
+  enum event_type type;
   u64 start;
   u64 ts;
-  u64 cptr;
   union nf_inet_addr srcaddr;
   union nf_inet_addr dstaddr;
   u64 packets_orig;
@@ -23,6 +25,13 @@ struct event {
   u16 srcport;
   u16 dstport;
   u8 proto;
+};
+
+// Lightweight packet counters for making rate limiting decisions.
+struct packets {
+  u64 orig;
+  u64 ret;
+  u64 total;
 };
 
 // ct_valid returns true if the nf_conn carries the IPS_CONFIRMED bit.
@@ -45,12 +54,27 @@ static __always_inline void *ct_get_ext(struct nf_conn *ct, enum nf_ct_ext_id id
   return (void *)ct->ext + off;
 }
 
-// extract_counters extracts accounting and timestamp info from an nf_conn into
-// data.
-//
-// Returns false if either extension failed to extract.
-static __always_inline bool extract_extensions(struct event *data, struct nf_conn *ct) {
-  struct nf_conn_acct *acct = ct_get_ext(ct, NF_CT_EXT_ACCT);
+static __always_inline struct nf_conn_acct *ct_get_acct(struct nf_conn *ct) {
+  return ct_get_ext(ct, NF_CT_EXT_ACCT);
+}
+
+static __always_inline struct nf_conn_tstamp *ct_get_tstamp(struct nf_conn *ct) {
+  return ct_get_ext(ct, NF_CT_EXT_TSTAMP);
+}
+
+static __always_inline bool packets_read_acct(struct packets *packets, struct nf_conn_acct *acct) {
+  if (acct == NULL)
+    return false;
+
+  packets->orig = BPF_CORE_READ(acct, counter[IP_CT_DIR_ORIGINAL].packets.counter);
+  packets->ret = BPF_CORE_READ(acct, counter[IP_CT_DIR_REPLY].packets.counter);
+
+  packets->total = packets->orig + packets->ret;
+
+  return true;
+}
+
+static __always_inline bool data_read_acct(struct event *data, struct nf_conn_acct *acct) {
   if (acct == NULL)
     return false;
 
@@ -60,7 +84,10 @@ static __always_inline bool extract_extensions(struct event *data, struct nf_con
   data->packets_ret = BPF_CORE_READ(acct, counter[IP_CT_DIR_REPLY].packets.counter);
   data->bytes_ret = BPF_CORE_READ(acct, counter[IP_CT_DIR_REPLY].bytes.counter);
 
-  struct nf_conn_tstamp *ts = ct_get_ext(ct, NF_CT_EXT_TSTAMP);
+  return true;
+}
+
+static __always_inline bool data_read_tstamp(struct event *data, struct nf_conn_tstamp *ts) {
   if (ts == NULL)
     return false;
 
@@ -79,8 +106,8 @@ static __always_inline void extract_tuple(struct event *data, struct nf_conn *ct
   data->srcaddr = tuple->src.u3;
   data->dstaddr = tuple->dst.u3;
 
-  data->srcport = tuple->src.u.all;
-  data->dstport = tuple->dst.u.all;
+  data->srcport = bpf_htons(tuple->src.u.all);
+  data->dstport = bpf_htons(tuple->dst.u.all);
 }
 
 static __always_inline struct nf_conn *skb_get_ct(struct sk_buff *skb) {

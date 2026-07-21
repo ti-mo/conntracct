@@ -17,8 +17,8 @@ var hashPool = sync.Pool{
 	},
 }
 
-// EventLength is the length of the struct sent by BPF.
-const EventLength = 108
+// eventLength is the length of the struct sent by BPF.
+const eventLength = int(unsafe.Sizeof(acctEvent{}))
 
 //go:generate go tool stringer -type=EventType
 type EventType uint32
@@ -46,39 +46,38 @@ type Event struct {
 	NetNS       uint32     `json:"netns"`
 	Type        EventType  `json:"type"`
 	Proto       uint8      `json:"proto"`
-
-	connPtr uint64
 }
 
 // unmarshalBinary unmarshals a slice of bytes received from the
 // kernel's eBPF perf map into a struct using the machine's native endianness.
 func (e *Event) unmarshalBinary(b []byte) error {
-	if len(b) != EventLength {
-		return fmt.Errorf("input byte array incorrect length %d (expected %d): %v", len(b), EventLength, b)
+	if len(b) != eventLength {
+		return fmt.Errorf("input byte array incorrect length %d (expected %d): %v", len(b), eventLength, b)
 	}
 
-	e.Start = *(*uint64)(unsafe.Pointer(&b[0]))
-	e.Timestamp = *(*uint64)(unsafe.Pointer(&b[8]))
-	e.connPtr = *(*uint64)(unsafe.Pointer(&b[16]))
+	be := (*acctEvent)(unsafe.Pointer(unsafe.SliceData(b)))
 
-	// Build an IPv4 address if only the first four bytes
-	// of the nf_inet_addr union are filled.
-	e.SrcAddr = addrFromBPF([16]byte(b[24:40]))
-	e.DstAddr = addrFromBPF([16]byte(b[40:56]))
+	e.Type = EventType(be.Type)
 
-	e.PacketsOrig = *(*uint64)(unsafe.Pointer(&b[56]))
-	e.BytesOrig = *(*uint64)(unsafe.Pointer(&b[64]))
-	e.PacketsRet = *(*uint64)(unsafe.Pointer(&b[72]))
-	e.BytesRet = *(*uint64)(unsafe.Pointer(&b[80]))
+	e.Start = be.Start
+	e.Timestamp = be.Ts
 
-	e.Connmark = *(*uint32)(unsafe.Pointer(&b[88]))
-	e.NetNS = *(*uint32)(unsafe.Pointer(&b[92]))
+	e.SrcAddr = addrFromBPF(be.Srcaddr.In6.In6U.U6Addr8)
+	e.DstAddr = addrFromBPF(be.Dstaddr.In6.In6U.U6Addr8)
+
+	e.PacketsOrig = be.PacketsOrig
+	e.BytesOrig = be.BytesOrig
+	e.PacketsRet = be.PacketsRet
+	e.BytesRet = be.BytesRet
+
+	e.Connmark = be.Connmark
+	e.NetNS = be.Netns
 
 	// Only extract ports for UDP and TCP.
-	e.Proto = b[100]
+	e.Proto = be.Proto
 	if e.Proto == 6 || e.Proto == 17 {
-		e.SrcPort = binary.BigEndian.Uint16(b[96:98])
-		e.DstPort = binary.BigEndian.Uint16(b[98:100])
+		e.SrcPort = be.Srcport
+		e.DstPort = be.Dstport
 	}
 
 	// Generate and set the Event's FlowID.
@@ -90,9 +89,9 @@ func (e *Event) unmarshalBinary(b []byte) error {
 // hashFlow calculates a flow hash base on the the Event's
 // source and destination address, ports, protocol and connection ID.
 func (e *Event) hashFlow() uint32 {
-
-	// Get a Hasher from the pool.
 	h := hashPool.Get().(*blake3.Hasher)
+
+	_, _ = h.Write(binary.LittleEndian.AppendUint64(nil, e.Start))
 
 	// Source/Destination Address.
 	_, _ = h.Write(e.SrcAddr.AsSlice())
@@ -110,11 +109,6 @@ func (e *Event) hashFlow() uint32 {
 
 	// Protocol.
 	_, _ = h.Write([]byte{e.Proto})
-
-	// nf_conn struct kernel pointer.
-	b = make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, e.connPtr)
-	_, _ = h.Write(b)
 
 	// Calculate the hash.
 	// Shift one position to the right to fit the FlowID into a

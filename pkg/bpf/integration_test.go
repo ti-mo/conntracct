@@ -337,7 +337,7 @@ func readTimeout(c <-chan Event, ms uint) (Event, error) {
 // newUpdateConsumer creates and registers an Consumer for a test.
 func newUpdateConsumer(t *testing.T) (*Consumer, chan Event) {
 	c := make(chan Event, 2048)
-	ac := NewConsumer(t.Name(), c, ConsumerUpdate)
+	ac := NewConsumer(t.Name(), c)
 	require.NoError(t, acctProbe.RegisterConsumer(ac))
 
 	return ac, c

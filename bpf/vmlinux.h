@@ -34,7 +34,7 @@ typedef __s64 s64;
 enum bpf_map_type {
 	BPF_MAP_TYPE_HASH = 1,
 	BPF_MAP_TYPE_ARRAY = 2,
-	BPF_MAP_TYPE_PERF_EVENT_ARRAY = 4,
+	BPF_MAP_TYPE_RINGBUF = 27,
 };
 
 enum {
@@ -63,8 +63,6 @@ struct in_addr {
 struct in6_addr {
 	union {
 		__u8 u6_addr8[16];
-		__be16 u6_addr16[8];
-		__be32 u6_addr32[4];
 	} in6_u;
 };
 
@@ -73,10 +71,6 @@ struct sk_buff {
 };
 
 union nf_inet_addr {
-	__u32 all[4];
-	__be32 ip;
-	__be32 ip6[4];
-	struct in_addr in;
 	struct in6_addr in6;
 };
 
