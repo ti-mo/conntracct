@@ -3,7 +3,7 @@ package bpf
 import (
 	"encoding/binary"
 	"fmt"
-	"net"
+	"net/netip"
 	"sync"
 	"unsafe"
 
@@ -31,21 +31,21 @@ const (
 
 // Event is an accounting event delivered to userspace from the Probe.
 type Event struct {
-	Start       uint64    `json:"start"`     // epoch timestamp of flow start
-	Timestamp   uint64    `json:"timestamp"` // ktime of event, relative to machine boot time
-	FlowID      uint32    `json:"flow_id"`
-	Connmark    uint32    `json:"connmark"`
-	SrcAddr     net.IP    `json:"src_addr"`
-	DstAddr     net.IP    `json:"dst_addr"`
-	PacketsOrig uint64    `json:"packets_orig"`
-	BytesOrig   uint64    `json:"bytes_orig"`
-	PacketsRet  uint64    `json:"packets_ret"`
-	BytesRet    uint64    `json:"bytes_ret"`
-	SrcPort     uint16    `json:"src_port"`
-	DstPort     uint16    `json:"dst_port"`
-	NetNS       uint32    `json:"netns"`
-	Type        EventType `json:"type"`
-	Proto       uint8     `json:"proto"`
+	Start       uint64     `json:"start"`     // epoch timestamp of flow start
+	Timestamp   uint64     `json:"timestamp"` // ktime of event, relative to machine boot time
+	FlowID      uint32     `json:"flow_id"`
+	Connmark    uint32     `json:"connmark"`
+	SrcAddr     netip.Addr `json:"src_addr"`
+	DstAddr     netip.Addr `json:"dst_addr"`
+	PacketsOrig uint64     `json:"packets_orig"`
+	BytesOrig   uint64     `json:"bytes_orig"`
+	PacketsRet  uint64     `json:"packets_ret"`
+	BytesRet    uint64     `json:"bytes_ret"`
+	SrcPort     uint16     `json:"src_port"`
+	DstPort     uint16     `json:"dst_port"`
+	NetNS       uint32     `json:"netns"`
+	Type        EventType  `json:"type"`
+	Proto       uint8      `json:"proto"`
 
 	connPtr uint64
 }
@@ -63,19 +63,8 @@ func (e *Event) unmarshalBinary(b []byte) error {
 
 	// Build an IPv4 address if only the first four bytes
 	// of the nf_inet_addr union are filled.
-	// Assigning 4 bytes directly into IP() is incorrect,
-	// an IPv4 is stored in the last 4 bytes of an IP().
-	if isIPv4(b[24:40]) {
-		e.SrcAddr = net.IPv4(b[24], b[25], b[26], b[27])
-	} else {
-		e.SrcAddr = net.IP(b[24:40])
-	}
-
-	if isIPv4(b[40:56]) {
-		e.DstAddr = net.IPv4(b[40], b[41], b[42], b[43])
-	} else {
-		e.DstAddr = net.IP(b[40:56])
-	}
+	e.SrcAddr = addrFromBPF([16]byte(b[24:40]))
+	e.DstAddr = addrFromBPF([16]byte(b[40:56]))
 
 	e.PacketsOrig = *(*uint64)(unsafe.Pointer(&b[56]))
 	e.BytesOrig = *(*uint64)(unsafe.Pointer(&b[64]))
@@ -106,8 +95,8 @@ func (e *Event) hashFlow() uint32 {
 	h := hashPool.Get().(*blake3.Hasher)
 
 	// Source/Destination Address.
-	_, _ = h.Write(e.SrcAddr)
-	_, _ = h.Write(e.DstAddr)
+	_, _ = h.Write(e.SrcAddr.AsSlice())
+	_, _ = h.Write(e.DstAddr.AsSlice())
 
 	b := make([]byte, 2)
 
@@ -144,14 +133,16 @@ func (e *Event) String() string {
 	return fmt.Sprintf("%+v", *e)
 }
 
-// isIPv4 checks if everything but the first 4 bytes of a bytearray
-// are zero. The nf_inet_addr C struct holds an IPv4 address in the
-// first 4 bytes followed by zeroes. Does not execute a bounds check.
-func isIPv4(s []byte) bool {
-	for _, v := range s[4:] {
+// addrFromBPF returns a netip.Addr from a byte array representing an IPv4 or
+// IPv6 address from the kernel.
+//
+// If the input array contains any non-zero bytes past the first 4, it is
+// considered an IPv6 address.
+func addrFromBPF(b [16]byte) netip.Addr {
+	for _, v := range b[4:] {
 		if v != 0 {
-			return false
+			return netip.AddrFrom16(b)
 		}
 	}
-	return true
+	return netip.AddrFrom4([4]byte(b[:4]))
 }

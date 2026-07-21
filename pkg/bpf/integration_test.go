@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"runtime"
 	"syscall"
@@ -267,8 +268,8 @@ func TestProbeVerify(t *testing.T) {
 	// Connection tuple
 	assert.EqualValues(t, udpServ, ev.DstPort, ev.String())
 	assert.EqualValues(t, mc.ClientPort(), ev.SrcPort, ev.String())
-	assert.EqualValues(t, net.IPv4(127, 0, 1, 1), ev.SrcAddr, ev.String())
-	assert.EqualValues(t, net.IPv4(127, 0, 1, 1), ev.DstAddr, ev.String())
+	assert.EqualValues(t, netip.MustParseAddr("127.0.1.1"), ev.SrcAddr, ev.String())
+	assert.EqualValues(t, netip.MustParseAddr("127.0.1.1"), ev.DstAddr, ev.String())
 	assert.EqualValues(t, 17, ev.Proto, ev.String())
 
 	start := ev.Start
