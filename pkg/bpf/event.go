@@ -20,22 +20,32 @@ var hashPool = sync.Pool{
 // EventLength is the length of the struct sent by BPF.
 const EventLength = 108
 
+//go:generate go tool stringer -type=EventType
+type EventType uint32
+
+const (
+	New EventType = 1 << iota
+	Update
+	Destroy
+)
+
 // Event is an accounting event delivered to userspace from the Probe.
 type Event struct {
-	Start       uint64 `json:"start"`     // epoch timestamp of flow start
-	Timestamp   uint64 `json:"timestamp"` // ktime of event, relative to machine boot time
-	FlowID      uint32 `json:"flow_id"`
-	Connmark    uint32 `json:"connmark"`
-	SrcAddr     net.IP `json:"src_addr"`
-	DstAddr     net.IP `json:"dst_addr"`
-	PacketsOrig uint64 `json:"packets_orig"`
-	BytesOrig   uint64 `json:"bytes_orig"`
-	PacketsRet  uint64 `json:"packets_ret"`
-	BytesRet    uint64 `json:"bytes_ret"`
-	SrcPort     uint16 `json:"src_port"`
-	DstPort     uint16 `json:"dst_port"`
-	NetNS       uint32 `json:"netns"`
-	Proto       uint8  `json:"proto"`
+	Start       uint64    `json:"start"`     // epoch timestamp of flow start
+	Timestamp   uint64    `json:"timestamp"` // ktime of event, relative to machine boot time
+	FlowID      uint32    `json:"flow_id"`
+	Connmark    uint32    `json:"connmark"`
+	SrcAddr     net.IP    `json:"src_addr"`
+	DstAddr     net.IP    `json:"dst_addr"`
+	PacketsOrig uint64    `json:"packets_orig"`
+	BytesOrig   uint64    `json:"bytes_orig"`
+	PacketsRet  uint64    `json:"packets_ret"`
+	BytesRet    uint64    `json:"bytes_ret"`
+	SrcPort     uint16    `json:"src_port"`
+	DstPort     uint16    `json:"dst_port"`
+	NetNS       uint32    `json:"netns"`
+	Type        EventType `json:"type"`
+	Proto       uint8     `json:"proto"`
 
 	connPtr uint64
 }

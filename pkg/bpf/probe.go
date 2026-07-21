@@ -180,6 +180,10 @@ func (ap *Probe) updateWorker() {
 			panic(err)
 		}
 
+		// The update perf map carries both new and update events, which
+		// cannot be told apart in userspace. Tag them all as updates.
+		ae.Type = Update
+
 		// Fan out update event to all registered consumers.
 		ap.fanoutEvent(ae, true)
 	}
@@ -211,6 +215,8 @@ func (ap *Probe) destroyWorker() {
 		if err := ae.unmarshalBinary(rec.RawSample); err != nil {
 			panic(err)
 		}
+
+		ae.Type = Destroy
 
 		// Fan out destroy event to all registered consumers.
 		ap.fanoutEvent(ae, false)
