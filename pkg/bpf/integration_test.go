@@ -1,5 +1,3 @@
-// +build integration
-
 package bpf
 
 import (
@@ -39,9 +37,6 @@ var (
 )
 
 func TestMain(m *testing.M) {
-
-	var err error
-
 	cfg := Config{
 		Curve0: CurvePoint{
 			Age:  0 * time.Millisecond,
@@ -57,10 +52,11 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	// Set up a dummy network namespace and immediately close it.
-	// One of the steps of preparing a namespace includes installing an nftables ruleset.
-	// This ruleset contains a conntrack matcher, which will automatically cause the correct
-	// conntrack kernel module to be loaded. This means we don't have to explicitly modprobe.
+	// Set up a dummy network namespace and immediately close it. One of the
+	// steps of preparing a namespace includes installing an nftables ruleset.
+	// This ruleset contains a conntrack matcher, which will automatically cause
+	// the correct conntrack kernel module to be loaded. This means we don't
+	// have to explicitly modprobe.
 	_, _, f, err := prepareNetNS(9999)
 	f()
 	if err != nil {
@@ -124,7 +120,6 @@ func TestProbeFirstPacket(t *testing.T) {
 // Age: 50, Interval: 25
 // Age: 100, Interval: 50
 func TestProbeCurve(t *testing.T) {
-
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
 
@@ -238,7 +233,6 @@ func TestProbeCurve(t *testing.T) {
 // sources. This checks whether the BPF program is reading the correct offsets
 // from kernel memory.
 func TestProbeVerify(t *testing.T) {
-
 	// Create and register consumer.
 	ac, in := newUpdateConsumer(t)
 

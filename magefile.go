@@ -1,4 +1,4 @@
-// +build mage
+//go:build mage
 
 package main
 
@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 	"github.com/magefile/mage/target"
 )
@@ -30,7 +31,6 @@ var (
 
 // Build builds the application.
 func Build() error {
-
 	// Watch for files newer than the app in these directories.
 	mod, err := target.Dir(buildPath, "bpf", "pkg", "cmd", "internal")
 	if err != nil {
@@ -38,7 +38,6 @@ func Build() error {
 	}
 
 	if mod {
-
 		realPath := realPath(buildPath)
 
 		// Unlink the existing binary so it can be replaced without stopping the daemon first.
@@ -70,7 +69,6 @@ func Build() error {
 
 // Dev brings up a docker-compose stack and runs the application with modd for live reloading.
 func Dev() error {
-
 	if err := sh.Run("docker-compose", "-f", "test/docker-compose.yml", "-p", app, "up", "-d"); err != nil {
 		return err
 	}
@@ -90,6 +88,25 @@ func Generate() error {
 	}
 
 	fmt.Println("Successfully ran go generate.")
+	return nil
+}
+
+// Test runs unit tests.
+func Test() error {
+	if err := sh.RunV("go", "test", "-exec=sudo", "-v", "-race", "-coverprofile=coverage.out", "-covermode=atomic", "./..."); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Coverhtml runs tests and opens the coverage report in the browser.
+func Coverhtml() error {
+	mg.Deps(Test)
+	if err := sh.RunV("go", "tool", "cover", "-html=coverage.out"); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -117,7 +134,6 @@ func Snapshot() error {
 // realPath resolves (nested) symlinks. If the target of a nested symlink does
 // not exist, falls back to the target of the first symlink.
 func realPath(path string) string {
-
 	fi, err := os.Lstat(path)
 	if err != nil {
 		// Return the input string if the path doesn't exist (yet), there's nothing to resolve.
