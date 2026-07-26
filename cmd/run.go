@@ -88,29 +88,18 @@ func run(cmd *cobra.Command, args []string) error {
 
 // getProbeSinkConfig parses the probe and sink configurations from Viper.
 func getProbeSinkConfig() (*config.ProbeConfig, []config.SinkConfig, error) {
-
 	// Get probe configuration from Viper.
 	pcfg, err := config.DecodeProbeConfigMap(viper.GetStringMap(cfgProbe))
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Debug("Read probe configuration: ", pcfg)
-
-	// Fill ProbeConfig with defaults.
-	pcfg.Default(config.DefaultProbeConfig)
-	log.Info("Using probe configuration: ", pcfg)
+	log.Debug("Using probe configuration: ", pcfg)
 
 	// Get sink configuration from Viper.
 	scfg, err := config.DecodeSinkConfigMap(viper.GetStringMap(cfgSinks))
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Debugf("Read sink configuration: %+v", scfg)
-
-	if len(scfg) == 0 {
-		scfg = config.DefaultSinkConfig
-	}
-	// Log as debug, these often contain credentials.
 	log.Debugf("Using sink configuration: %+v", scfg)
 
 	return pcfg, scfg, nil
