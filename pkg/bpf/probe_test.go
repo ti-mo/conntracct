@@ -3,10 +3,8 @@ package bpf
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/netip"
-	"os"
 	"runtime"
 	"syscall"
 	"testing"
@@ -33,11 +31,11 @@ const (
 	bindAddr = "127.0.1.1"
 )
 
-var (
-	acctProbe *Probe
-)
+// setupProbe creates and starts a Probe for the duration of a single test.
+// The probe is stopped when the test finishes.
+func setupProbe(t *testing.T) *Probe {
+	t.Helper()
 
-func TestMain(m *testing.M) {
 	cfg := Config{
 		Curve0: CurvePoint{
 			Age:  0 * time.Millisecond,
@@ -53,48 +51,29 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	// Set up a dummy network namespace and immediately close it. One of the
-	// steps of preparing a namespace includes installing an nftables ruleset.
-	// This ruleset contains a conntrack matcher, which will automatically cause
-	// the correct conntrack kernel module to be loaded. This means we don't
-	// have to explicitly modprobe.
-	_, _, f, err := prepareNetNS(9999)
-	if err != nil {
-		log.Fatal(err)
-	}
-	f()
-
 	// Create and start the Probe.
 	// For this to succeed, a conntrack kernel module needs to have been pre-loaded.
-	acctProbe, err = NewProbe(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := acctProbe.Start(); err != nil {
-		log.Fatal(err)
-	}
+	probe, err := NewProbe(cfg)
+	require.NoError(t, err, "creating probe")
+	require.NoError(t, probe.Start(), "starting probe")
 
-	// Run tests, save the return code.
-	rc := m.Run()
+	t.Cleanup(func() {
+		if err := probe.Stop(); err != nil {
+			t.Errorf("stopping probe: %v", err)
+		}
+	})
 
-	// Tear down resources.
-	if err := acctProbe.Stop(); err != nil {
-		log.Fatal(err)
-	}
-
-	os.Exit(rc)
+	return probe
 }
 
 // Checks if the first packet in a flow is logged, and that
 // a further read from the channel times out.
 func TestProbeFirstPacket(t *testing.T) {
-	// Create and register consumer.
-	ac, in := newUpdateConsumer(t)
-
 	// Set up a new network namespace to run tests.
-	mc, _, cfn, err := prepareNetNS(udpServ)
-	require.NoError(t, err, "preparing netns")
-	defer cfn()
+	mc, _ := prepareNetNS(t, udpServ)
+
+	// Create and register consumer.
+	_, in := newUpdateConsumer(t, setupProbe(t))
 
 	// Filter BPF Events based on client port.
 	out := filterSourcePort(in, mc.ClientPort())
@@ -109,8 +88,6 @@ func TestProbeFirstPacket(t *testing.T) {
 	mc.Ping(1)
 	_, err = readTimeout(out, 5)
 	assert.ErrorIs(t, err, errChanTimeout)
-
-	require.NoError(t, acctProbe.RemoveConsumer(ac))
 }
 
 // Run through all three age/interval curve points to test
@@ -120,13 +97,11 @@ func TestProbeFirstPacket(t *testing.T) {
 // Age: 50, Interval: 25
 // Age: 100, Interval: 50
 func TestProbeCurve(t *testing.T) {
-	// Create and register consumer.
-	ac, in := newUpdateConsumer(t)
-
 	// Set up a new network namespace to run tests.
-	mc, _, cfn, err := prepareNetNS(udpServ)
-	require.NoError(t, err, "preparing netns")
-	defer cfn()
+	mc, _ := prepareNetNS(t, udpServ)
+
+	// Create and register consumer.
+	_, in := newUpdateConsumer(t, setupProbe(t))
 
 	// Filter BPF Events based on client port.
 	out := filterSourcePort(in, mc.ClientPort())
@@ -224,22 +199,17 @@ func TestProbeCurve(t *testing.T) {
 	require.NoError(t, err)
 	// Expect it to be the 15th packet in the flow.
 	assert.EqualValues(t, 15, ev.PacketsOrig+ev.PacketsRet, ev.String())
-
-	// Remove the consumer from the probe.
-	require.NoError(t, acctProbe.RemoveConsumer(ac))
 }
 
 // Verify as many fields as possible based on information obtained from other
 // sources. This checks whether the BPF program is reading the correct offsets
 // from kernel memory.
 func TestProbeVerify(t *testing.T) {
-	// Create and register consumer.
-	ac, in := newUpdateConsumer(t)
-
 	// Set up a new network namespace to run tests.
-	mc, ns, cfn, err := prepareNetNS(udpServ)
-	require.NoError(t, err, "preparing netns")
-	defer cfn()
+	mc, ns := prepareNetNS(t, udpServ)
+
+	// Create and register consumer.
+	_, in := newUpdateConsumer(t, setupProbe(t))
 
 	// Filter BPF Events based on client port.
 	out := filterSourcePort(in, mc.ClientPort())
@@ -287,8 +257,6 @@ func TestProbeVerify(t *testing.T) {
 	assert.EqualValues(t, start, ev.Start, ev.String())
 	// Make sure the timestamp value increased over the previous sample.
 	assert.True(t, ev.Timestamp > ts)
-
-	require.NoError(t, acctProbe.RemoveConsumer(ac))
 }
 
 // filterSourcePort returns an unbuffered channel of Events
@@ -334,18 +302,30 @@ func readTimeout(c <-chan Event, ms uint) (Event, error) {
 	}
 }
 
-// newUpdateConsumer creates and registers an Consumer for a test.
-func newUpdateConsumer(t *testing.T) (*Consumer, chan Event) {
+// newUpdateConsumer creates and registers a Consumer for a test.
+// The consumer is removed from the probe when the test finishes.
+func newUpdateConsumer(t *testing.T, probe *Probe) (*Consumer, chan Event) {
+	t.Helper()
+
 	c := make(chan Event, 2048)
 	ac := NewConsumer(t.Name(), c)
-	require.NoError(t, acctProbe.RegisterConsumer(ac))
+	require.NoError(t, probe.RegisterConsumer(ac))
+
+	t.Cleanup(func() {
+		if err := probe.RemoveConsumer(ac); err != nil {
+			t.Errorf("removing consumer from probe: %v", err)
+		}
+	})
 
 	return ac, c
 }
 
 // prepareNetNS creates a Conn in a new network namespace to use for testing.
-// Returns the UDP server and client, the netns identifier and error, if any.
-func prepareNetNS(port uint16) (*udpecho.MockUDPClient, uint64, func(), error) {
+// Returns the UDP server and client, the netns identifier and a closer
+// function releasing all resources. Fails the test on error.
+func prepareNetNS(t *testing.T, port uint16) (*udpecho.MockUDPClient, uint64) {
+	t.Helper()
+
 	// Lock the current goroutine to the OS thread.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -353,35 +333,25 @@ func prepareNetNS(port uint16) (*udpecho.MockUDPClient, uint64, func(), error) {
 	// Get the current network namespace and
 	// return the thread to it before unlocking.
 	oldns, err := netns.Get()
-	if err != nil {
-		return nil, 0, nil, err
-	}
+	require.NoError(t, err, "getting current netns")
 	defer func() {
 		if err := netns.Set(oldns); err != nil {
-			log.Fatal(err)
+			t.Fatalf("restoring netns: %v", err)
 		}
 	}()
 
 	// Allocate new network namespace.
 	newns, err := netns.New()
-	if err != nil {
-		return nil, 0, nil, fmt.Errorf("creating network namespace: %w", err)
-	}
+	require.NoError(t, err, "creating network namespace")
 
 	// Set up network interfaces inside the new netns.
-	if err := setupInterface(newns); err != nil {
-		return nil, 0, nil, fmt.Errorf("setting up interfaces: %w", err)
-	}
+	require.NoError(t, setupInterface(newns), "setting up interfaces")
 
 	// Set up nftables rules inside network namespace.
-	if err := setupNFTables(port, newns); err != nil {
-		return nil, 0, nil, fmt.Errorf("setting up nftables: %w", err)
-	}
+	require.NoError(t, setupNFTables(port, newns), "setting up nftables")
 
 	// Set the required sysctl's for the probe to gather accounting data.
-	if err := Sysctls(false); err != nil {
-		return nil, 0, nil, fmt.Errorf("applying sysctl: %w", err)
-	}
+	require.NoError(t, Sysctls(false), "applying sysctl")
 
 	// Create UDP listener inside network namespace.
 	srv := udpecho.ListenAndEcho(bindAddr, port)
@@ -391,13 +361,13 @@ func prepareNetNS(port uint16) (*udpecho.MockUDPClient, uint64, func(), error) {
 
 	// Closer function passed to the caller to conveniently
 	// close all resources.
-	closer := func() {
+	t.Cleanup(func() {
 		client.Close()
 		srv.Close()
 		newns.Close()
-	}
+	})
 
-	return client, netnsInode(newns), closer, nil
+	return client, netnsInode(newns)
 }
 
 type CTState int
