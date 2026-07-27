@@ -12,6 +12,7 @@ import (
 
 	"github.com/jsimonetti/rtnetlink/rtnl"
 	"github.com/mdlayher/netlink"
+	"github.com/ti-mo/conntrack"
 	"golang.org/x/sys/unix"
 
 	"github.com/google/nftables"
@@ -31,8 +32,8 @@ const (
 	bindAddr = "127.0.1.1"
 )
 
-// setupProbe creates and starts a Probe for the duration of a single test.
-// The probe is stopped when the test finishes.
+// setupProbe creates and starts a Probe for the duration of a single test. The
+// probe is stopped when the test finishes.
 func setupProbe(t *testing.T) *Probe {
 	t.Helper()
 
@@ -51,8 +52,8 @@ func setupProbe(t *testing.T) *Probe {
 		},
 	}
 
-	// Create and start the Probe.
-	// For this to succeed, a conntrack kernel module needs to have been pre-loaded.
+	// Create and start the Probe. For this to succeed, a conntrack kernel
+	// module needs to have been pre-loaded.
 	probe, err := NewProbe(cfg)
 	require.NoError(t, err, "creating probe")
 	require.NoError(t, probe.Start(), "starting probe")
@@ -66,11 +67,11 @@ func setupProbe(t *testing.T) *Probe {
 	return probe
 }
 
-// Checks if the first packet in a flow is logged, and that
-// a further read from the channel times out.
+// Checks if the first packet in a flow is logged, and that a further read from
+// the channel times out.
 func TestProbeFirstPacket(t *testing.T) {
 	// Set up a new network namespace to run tests.
-	mc, _ := prepareNetNS(t, udpServ)
+	mc, _ := setupNetNS(t, udpServ)
 
 	// Create and register consumer.
 	_, in := newUpdateConsumer(t, setupProbe(t))
@@ -90,15 +91,16 @@ func TestProbeFirstPacket(t *testing.T) {
 	assert.ErrorIs(t, err, errChanTimeout)
 }
 
-// Run through all three age/interval curve points to test
-// if the probe is sending and dropping the right events.
-// Tests the following curve (values in milliseconds):
-// Age: 0, Interval: 10
-// Age: 50, Interval: 25
-// Age: 100, Interval: 50
+// Run through all three age/interval curve points to test if the probe is
+// sending and dropping the right events. Tests the following curve (values in
+// milliseconds):
+//
+//	Age: 0, Interval: 10
+//	Age: 50, Interval: 25
+//	Age: 100, Interval: 50
 func TestProbeCurve(t *testing.T) {
 	// Set up a new network namespace to run tests.
-	mc, _ := prepareNetNS(t, udpServ)
+	mc, ns := setupNetNS(t, udpServ)
 
 	// Create and register consumer.
 	_, in := newUpdateConsumer(t, setupProbe(t))
@@ -199,6 +201,19 @@ func TestProbeCurve(t *testing.T) {
 	require.NoError(t, err)
 	// Expect it to be the 15th packet in the flow.
 	assert.EqualValues(t, 15, ev.PacketsOrig+ev.PacketsRet, ev.String())
+
+	// Kill the flow.
+	ct, err := conntrack.Dial(&netlink.Config{NetNS: int(ns)})
+	require.NoError(t, err)
+	require.NoError(t, ct.Delete(mc.Flow()))
+
+	// Expect there to be a destroy event for the flow.
+	ev, err = readTimeout(out, 5)
+	require.NoError(t, err)
+	assert.EqualValues(t, ev.Type, Destroy)
+
+	// Return packet should be included in the destroy.
+	assert.EqualValues(t, 16, ev.PacketsOrig+ev.PacketsRet, ev.String())
 }
 
 // Verify as many fields as possible based on information obtained from other
@@ -206,7 +221,7 @@ func TestProbeCurve(t *testing.T) {
 // from kernel memory.
 func TestProbeVerify(t *testing.T) {
 	// Set up a new network namespace to run tests.
-	mc, ns := prepareNetNS(t, udpServ)
+	mc, ns := setupNetNS(t, udpServ)
 
 	// Create and register consumer.
 	_, in := newUpdateConsumer(t, setupProbe(t))
@@ -220,7 +235,7 @@ func TestProbeVerify(t *testing.T) {
 	require.NoError(t, err)
 
 	// Network namespace.
-	assert.EqualValues(t, ns, ev.NetNS, ev.String())
+	assert.EqualValues(t, netnsInode(ns), ev.NetNS, ev.String())
 
 	// Timestamps
 	assert.NotEqual(t, 0, ev.Start, ev.String())
@@ -320,10 +335,9 @@ func newUpdateConsumer(t *testing.T, probe *Probe) (*Consumer, chan Event) {
 	return ac, c
 }
 
-// prepareNetNS creates a Conn in a new network namespace to use for testing.
-// Returns the UDP server and client, the netns identifier and a closer
-// function releasing all resources. Fails the test on error.
-func prepareNetNS(t *testing.T, port uint16) (*udpecho.MockUDPClient, uint64) {
+// setupNetNS creates a UDP client and server in a new netns to use for testing.
+// Returns the UDP client, and the inode of the netns.
+func setupNetNS(t *testing.T, port uint16) (*udpecho.MockUDPClient, netns.NsHandle) {
 	t.Helper()
 
 	// Lock the current goroutine to the OS thread.
@@ -345,10 +359,10 @@ func prepareNetNS(t *testing.T, port uint16) (*udpecho.MockUDPClient, uint64) {
 	require.NoError(t, err, "creating network namespace")
 
 	// Set up network interfaces inside the new netns.
-	require.NoError(t, setupInterface(newns), "setting up interfaces")
+	require.NoError(t, setupInterface(), "setting up interfaces")
 
 	// Set up nftables rules inside network namespace.
-	require.NoError(t, setupNFTables(port, newns), "setting up nftables")
+	require.NoError(t, setupNFTables(port), "setting up nftables")
 
 	// Set the required sysctl's for the probe to gather accounting data.
 	require.NoError(t, Sysctls(false), "applying sysctl")
@@ -359,35 +373,27 @@ func prepareNetNS(t *testing.T, port uint16) (*udpecho.MockUDPClient, uint64) {
 	// Create UDP client inside network namespace.
 	client := udpecho.Dial(bindAddr, port)
 
-	// Closer function passed to the caller to conveniently
-	// close all resources.
 	t.Cleanup(func() {
 		client.Close()
 		srv.Close()
 		newns.Close()
 	})
 
-	return client, netnsInode(newns)
+	return client, newns
 }
-
-type CTState int
 
 const (
-	IPCTEstablished CTState = iota // IP_CT_ESTABLISHED
-	_                              // IP_CT_RELATED
-	IPCTNew                        // IP_CT_NEW
+	// Values according to NF_CT_STATE_BIT.
+	ipCTEstablished uint32 = 1 << 1 // IP_CT_ESTABLISHED
+	ipCTNew                = 1 << 3 // IP_CT_NEW
 )
 
-// ctStateBit replicates the behaviour of the NF_CT_STATE_BIT kernel macro.
-func ctStateBit(state CTState) uint32 {
-	return 1 << (uint32(state) + 1)
-}
-
-func setupNFTables(port uint16, ns netns.NsHandle) error {
-
-	nftc := nftables.Conn{
-		NetNS: int(ns),
-	}
+// setupNFTables sets up nftables rules to allow outgoing packets belonging to
+// new and existing connections towards the given port. It also allows outgoing
+// return packets belonging to existing connections from the given port. All
+// other packets are dropped.
+func setupNFTables(port uint16) error {
+	nftc := nftables.Conn{}
 
 	nftc.FlushRuleset()
 
@@ -447,7 +453,7 @@ func setupNFTables(port uint16, ns netns.NsHandle) error {
 				SourceRegister: 1,
 				DestRegister:   1,
 				Len:            4,
-				Mask:           binaryutil.NativeEndian.PutUint32(ctStateBit(IPCTNew) | ctStateBit(IPCTEstablished)),
+				Mask:           binaryutil.NativeEndian.PutUint32(ipCTNew | ipCTEstablished),
 				Xor:            []uint8{0x0, 0x0, 0x0, 0x0},
 			},
 			&expr.Cmp{
@@ -499,7 +505,7 @@ func setupNFTables(port uint16, ns netns.NsHandle) error {
 				SourceRegister: 1,
 				DestRegister:   1,
 				Len:            4,
-				Mask:           binaryutil.NativeEndian.PutUint32(ctStateBit(IPCTEstablished)),
+				Mask:           binaryutil.NativeEndian.PutUint32(ipCTEstablished),
 				Xor:            []uint8{0x0, 0x0, 0x0, 0x0},
 			},
 			&expr.Cmp{
@@ -521,38 +527,31 @@ func setupNFTables(port uint16, ns netns.NsHandle) error {
 	return nil
 }
 
-func setupInterface(ns netns.NsHandle) error {
-	// Dial a connection to the rtnetlink socket. Specify the netns
-	// since netlink spawns a worker on a fresh OS thread. This thread
-	// needs to be moved into the netns.
-	conn, err := rtnl.Dial(&netlink.Config{NetNS: int(ns)})
+// setupInterface sets up the loopback interface inside a new network namespace.
+func setupInterface() error {
+	conn, err := rtnl.Dial(nil)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	// Get the interface Index. This func runs on a goroutine
-	// that is already locked to a new netns.
 	link, err := net.InterfaceByName("lo")
 	if err != nil {
 		return fmt.Errorf("getting lo ifindex: %w", err)
 	}
 
-	// Bring up the link.
 	if err := conn.LinkUp(link); err != nil {
 		return fmt.Errorf("setting up link lo: %w", err)
 	}
 
-	// Add the address to the link.
 	if err := conn.AddrAdd(link, rtnl.MustParseAddr(bindAddr+"/32")); err != nil {
 		return fmt.Errorf("adding address to lo: %w", err)
 	}
 
-	return err
+	return nil
 }
 
 func netnsInode(ns netns.NsHandle) uint64 {
-
 	if ns == -1 {
 		panic("cannot get inode of a closed netns")
 	}

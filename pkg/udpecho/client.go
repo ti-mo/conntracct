@@ -6,6 +6,9 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/ti-mo/conntrack"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -25,7 +28,6 @@ type MockUDPClient struct {
 // Returns a new MockUDPClient.
 // When host is an empty string, connects to 127.0.1.1 by default.
 func Dial(host string, port uint16) *MockUDPClient {
-
 	if host == "" {
 		host = "127.0.1.1"
 	}
@@ -55,7 +57,6 @@ func Dial(host string, port uint16) *MockUDPClient {
 // Close closes the MockUDPClients control channel and connection,
 // in that order.
 func (m *MockUDPClient) Close() {
-
 	// Wait for a write lock to avoid closing the socket during an r/w operation.
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -84,15 +85,31 @@ func (m *MockUDPClient) ClientAddr() *net.UDPAddr {
 	return m.conn.LocalAddr().(*net.UDPAddr)
 }
 
+func (m *MockUDPClient) ServerAddr() *net.UDPAddr {
+	return m.conn.RemoteAddr().(*net.UDPAddr)
+}
+
 // ClientPort returns the auto-generated client port of the connection.
 func (m *MockUDPClient) ClientPort() uint16 {
 	return uint16(m.ClientAddr().Port)
 }
 
+func (m *MockUDPClient) ServerPort() uint16 {
+	return uint16(m.ServerAddr().Port)
+}
+
+// Flow returns the conntrack Flow that can be used to look up the client's
+// socket using conntrack.
+func (m *MockUDPClient) Flow() conntrack.Flow {
+	return conntrack.NewFlow(unix.IPPROTO_UDP, 0,
+		m.ClientAddr().AddrPort().Addr(),
+		m.ServerAddr().AddrPort().Addr(),
+		m.ClientPort(), m.ServerPort(),
+		0, 0)
+}
+
 func (m *MockUDPClient) worker() {
-
 	b := make([]byte, 65507)
-
 	for {
 		// Wait for a control message.
 		c, ok := <-m.ctrl
