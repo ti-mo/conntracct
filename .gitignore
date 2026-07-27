@@ -1,10 +1,7 @@
 # Build
 dist/
 build/
-bpf/acct.o
 conntracct
 
 # Testing
-.vagrant/
-test/output/*
 coverage.out
