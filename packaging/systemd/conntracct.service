@@ -8,7 +8,7 @@ After=network-pre.target
 Type=simple
 ExecStart=/usr/bin/conntracct run
 Restart=on-failure
-CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_DAC_OVERRIDE CAP_SYS_RESOURCE
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_ADMIN
 
 ProtectSystem=full
 # Allow reading configuration from home directory.

@@ -50,12 +50,10 @@ func Build() error {
 			return err
 		}
 
-		// 'Minimal' capability set to run without being uid 0.
-		// cap_sys_admin for calling bpf().
-		// cap_ipc_lock for locking memory for the ring buffer.
-		// cap_dac_override for opening /sys/kernel/debug/tracing/*
+		// Minimal capability set to run without being uid 0.
+		// cap_sys_admin for attaching fentry/fexit
 		// cap_net_admin for managing sysctl net.netfilter.nf_conntrack_acct
-		if err := sh.Run("sudo", "setcap", "cap_sys_admin,cap_ipc_lock,cap_net_admin,cap_dac_override,cap_sys_resource+eip", realPath); err != nil {
+		if err := sh.Run("sudo", "setcap", "cap_sys_admin,cap_net_admin+eip", realPath); err != nil {
 			return err
 		}
 
