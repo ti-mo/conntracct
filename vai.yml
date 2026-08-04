@@ -1,0 +1,27 @@
+---
+config:
+  severity: info
+  cooldown: 200ms
+  batchingDuration: 1s
+
+jobs:
+  conntracct:
+    trigger:
+      regex:
+        - ".*\\.(c|h|go)$"
+        - "!.*_test\\.go$"
+        # Generated files.
+        - "!_string\\.go$"
+        - "!_bpf.*\\.go$"
+    series:
+      - "go tool task generate"
+      - "go tool task build"
+      - "./build/conntracct -d run -c configs/default.yml"
+
+  test:
+    trigger:
+      regex:
+        - ".*\\.go$"
+    series:
+      - "go tool task lint"
+      - "go tool task test"

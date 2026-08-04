@@ -1,0 +1,58 @@
+version: '3'
+
+vars:
+  APP: conntracct
+  BUILD_PATH: build/conntracct
+
+tasks:
+  build:
+    desc: Build the application.
+    env:
+      CGO_ENABLED: '0'
+    cmds:
+      # Unlink the existing binary so it can be replaced without stopping the daemon first.
+      - rm -f "$(realpath -m {{.BUILD_PATH}})"
+      - go build -o {{.BUILD_PATH}}
+      # Minimal capability set to run without being uid 0: cap_sys_admin for
+      # attaching fentry/fexit, cap_net_admin for managing sysctl
+      # net.netfilter.nf_conntrack_acct
+      - sudo setcap cap_sys_admin,cap_net_admin+eip "$(realpath {{.BUILD_PATH}})"
+      - echo "Successfully built {{.BUILD_PATH}}!"
+
+  generate:
+    desc: Run `go generate` on all packages.
+    cmds:
+      - go generate -x ./...
+      - echo "Successfully ran go generate."
+
+  test:
+    desc: Run unit tests.
+    cmds:
+      - go test -exec=sudo -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+  coverhtml:
+    desc: Run tests and open the coverage report in the browser.
+    deps: [test]
+    cmds:
+      - go tool cover -html=coverage.out
+
+  lint:
+    desc: Run golangci-lint with the project's configuration.
+    cmds:
+      - golangci-lint run
+
+  release:
+    desc: Build and publish the release to GitHub.
+    env:
+      GOVERSION:
+        sh: go version
+    cmds:
+      - goreleaser release --rm-dist
+
+  snapshot:
+    desc: Create a local snapshot release without publishing to GitHub.
+    env:
+      GOVERSION:
+        sh: go version
+    cmds:
+      - goreleaser release --rm-dist --snapshot
